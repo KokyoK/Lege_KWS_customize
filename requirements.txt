@@ -1,0 +1,11 @@
+brevitas==0.8.0
+librosa==0.10.0.post2
+matplotlib==3.4.2
+numpy==1.23.3
+para==0.0.8
+pyaudio==0.2.13
+scipy==1.9.3
+thop==0.1.1.post2209072238
+torch==1.12.1
+torchaudio==0.12.1
+torchvision==0.15.1
