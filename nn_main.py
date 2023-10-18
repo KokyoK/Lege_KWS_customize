@@ -3,7 +3,7 @@ torch.manual_seed(42)
 import torch.utils.data as data
 import speech_dataset as sd
 # import utility as util
-import utility_ee as util
+import utility as util
 import model as md
 import model_quantize as mdq
 

@@ -128,12 +128,14 @@ def train(model, root_dir, word_list, num_epoch):
             
             optimizer.step()
             train_loss += loss.item()*audio_data.size(0)
-            batch_accuracy = float(torch.sum(torch.argmax(out_full, 1) == labels).item())/float(audio_data.shape[0])
+            # batch_accuracy = float(torch.sum(torch.argmax(out_full, dim=1) == labels).item())/float(audio_data.shape[0])
+            batch_accuracy = float(torch.sum(torch.argmax(out_full.value, dim=1) == labels).item()) / float(
+                audio_data.shape[0])
 
             
             if (batch_idx%10 == 0):
                 print("Epoch {} | Train step #{}   | Loss: {:.4f}  | Accuracy: {:.4f}".format(epoch, step_idx, loss, batch_accuracy))
-            train_correct += torch.sum(torch.argmax(out_full, 1) == labels).item()
+            train_correct += torch.sum(torch.argmax(out_full.value, dim=1) == labels).item()
             step_idx += 1
 
         quantized_model = torch.quantization.convert(model.eval(), inplace=False)
@@ -162,11 +164,11 @@ def train(model, root_dir, word_list, num_epoch):
             loss = criterion(output, labels)
             valid_loss += loss.item()*audio_data.size(0)
 
-            batch_accuracy = (torch.sum(torch.argmax(output, 1) == labels).item())/audio_data.shape[0]
+            batch_accuracy = (torch.sum(torch.argmax(output.value, dim=1) == labels).item())/audio_data.shape[0]
             # print("Epoch {} | Eval step #{}     | Loss: {:.4f}  | Accuracy: {:.4f}".format(epoch,batch_idx, loss, batch_accuracy))
 
             path_count[path] += 1
-            valid_correct += torch.sum(torch.argmax(output, 1) == labels).item()
+            valid_correct += torch.sum(torch.argmax(output.value, dim=1) == labels).item()
 
             if(time_check):
                 torch.cuda.synchronize()
@@ -186,7 +188,6 @@ def train(model, root_dir, word_list, num_epoch):
         print("===========================================================================")
         print("EPOCH #{}     | TRAIN ACC: {:.2f}% | TRAIN LOSS : {:.2f}".format(epoch, train_accuracy,  train_loss))
         print("             | VAL ACC :  {:.2f}% | VAL LOSS   : {:.2f}".format(valid_accuracy,  valid_loss))
-        print("Validation path count:   ", path_count)
         print("Validation set inference time:    ",total_infer_time/len(dev_dataloader.dataset))
         print("===========================================================================")
         
