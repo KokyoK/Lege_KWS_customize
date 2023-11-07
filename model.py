@@ -13,7 +13,7 @@ import torch.nn.functional as F
 #                   /_______________ / /
 #                1 |_________________|/
 #                          time
-
+from thop import profile
 
 
 
@@ -73,6 +73,8 @@ class TCResNet8(nn.Module):
 
         # S2 Blocks
         self.s2_block0 = S2_Block(int(16 * k), int(24 * k))
+        self.early0 = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0,
+                            bias=False)
         self.s2_block1 = S2_Block(int(24 * k), int(32 * k))
         self.s2_block2 = S2_Block(int(32 * k), int(48 * k))
 
@@ -80,6 +82,7 @@ class TCResNet8(nn.Module):
         self.avg_pool = nn.AvgPool2d(kernel_size=(1, 13), stride=1)
         self.fc = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0,
                             bias=False)
+
 
     def forward(self, x):
         # print("nn input shape: ",x.shape)
@@ -337,11 +340,103 @@ class TCResNet8_flatten(nn.Module):
         self.load_state_dict(torch.load("saved_model/"+name, map_location=lambda storage, loc: storage))
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
+
+class TCResNet8_minimize(nn.Module):
+    """ TC-ResNet8 implementation without quantization.
+        Input dim:  [batch_size x n_mels x 1 x 101]
+        Output dim: [batch_size x n_classes]
+        Input -> Conv Layer -> (S2 Block) x 3 -> Average pooling -> FC Layer -> Output
+    """
+
+    def __init__(self, k, n_mels, n_classes):
+        super(TCResNet8_minimize, self).__init__()
+
+        self.conv_block_d = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=(1, 3), stride=1,
+                                      padding=(0, 1), bias=True)
+        self.relu0 = nn.ReLU()
+
+        # S2 Blocks
+        self.s2_block0 = S2_Block_minimize(int(16 * k), int(24 * k))
+        self.fc0 = nn.Linear(int(24 * k), n_classes, bias=False)
+        self.relu_e = nn.ReLU()
+        self.s2_block1 = S2_Block_minimize(int(24 * k), int(32 * k))
+        self.s2_block2 = S2_Block_minimize(int(32 * k), int(48 * k))
+
+        self.fc = nn.Linear(int(48 * k), n_classes, bias=False)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, x, exit_point=0):
+        out = self.conv_block_d(x)
+        out = self.relu0(out)
+
+        out = self.s2_block0(out)
+        out0 = F.max_pool2d(out, kernel_size=(1, 51), stride=1)
+        out0 = out0.reshape(out0.shape[0], -1)
+        # if exit_point == 0:
+
+        out0 = self.fc0(out0)
+        out0 = self.relu_e(out0)
+        # return out0
+
+        out = self.s2_block1(out)
+        out = self.s2_block2(out)
+
+        out = F.max_pool2d(out, kernel_size=(1, 13), stride=1)
+        out = out.reshape(out.shape[0], -1)
+        out = self.fc(out)
+        out = self.relu2(out)
+        return out
+
+    def save(self, is_onnx=0, name="saved_model/TCResNet8"):
+        if (is_onnx):
+            dummy_input = torch.randn(16, 30, 1, 101)
+            torch.onnx.export(self, dummy_input, "TCResNet8.onnx", verbose=True, input_names=["input0"],
+                              output_names=["output0"])
+        else:
+            torch.save(self.state_dict(), name)
+
+    def load(self, name="saved_model/TCResNet8"):
+        self.load_state_dict(torch.load(name, map_location=lambda storage, loc: storage))
+
+class S2_Block_minimize(nn.Module):
+    """ S2 ConvBlock used in Temporal Convolutions
+        - DCONV: depth-wise conv
+        - PCONV point-wise conv
+        -> DCONV -> RELU -> PCONV -> RELU -> DCONV -> RELU -> PCONV -> RELU
+    """
+
+    def __init__(self, in_ch, out_ch):
+        super(S2_Block_minimize, self).__init__()
+
+        self.conv0_d = nn.Conv2d(in_channels=in_ch, out_channels=out_ch, kernel_size=(1, 9), stride=2,
+                                 padding=(0, 4), bias=True)
+        self.relu0 = nn.ReLU()
+
+        self.conv1_d = nn.Conv2d(in_channels=out_ch, out_channels=out_ch, kernel_size=(1, 9), stride=1,
+                                 padding=(0, 4), bias=True)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, x):
+        out = self.conv0_d(x)
+        out = self.relu0(out)
+
+        out = self.conv1_d(out)
+        out = self.relu2(out)
+
+        return out
 
 
 if __name__ == "__main__":
     x = torch.rand(1, 40, 1, 101)
-    model_tcresnet8 = TCResNet8(1, 40, 12)
-    result_tcresnet8 = model_tcresnet8(x)
-    print(result_tcresnet8)
+    model_tcresnet8 = TCResNet8_minimize(1, 40, 10)
+    # result_tcresnet8 = model_tcresnet8(x)
+    # print(result_tcresnet8)
+
+    # 使用thop计算FLOPs和参数数量
+    flops, params = profile(model_tcresnet8, inputs=(x,))
+    print(f"FLOPs: {flops}") # 825744, 2071728
+    print(f"Params: {params}")
