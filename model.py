@@ -66,7 +66,8 @@ class TCResNet8(nn.Module):
 
     def __init__(self, k, n_mels, n_classes):
         super(TCResNet8, self).__init__()
-
+        self.num_exits = 2
+        self.flops = torch.Tensor([0.6080, 1.18586])  # 算上agent
         # First Convolution layer
         self.conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=(1, 3),
                                     padding=(0, 1), bias=False)
@@ -79,24 +80,37 @@ class TCResNet8(nn.Module):
         self.s2_block2 = S2_Block(int(32 * k), int(48 * k))
 
         # Features are [batch x 48*k channels x 1 x 13] at this point
+        self.avg_pool0 = nn.AvgPool2d(kernel_size=(1, 51), stride=1)
         self.avg_pool = nn.AvgPool2d(kernel_size=(1, 13), stride=1)
+
+        self.fc0 = nn.Conv2d(in_channels=int(24 * k), out_channels=n_classes, kernel_size=1, padding=0,
+                            bias=False)
         self.fc = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0,
                             bias=False)
 
 
-    def forward(self, x):
+    def forward(self, x,exit_point=0):
         # print("nn input shape: ",x.shape)
         out = self.conv_block(x)
 
         out = self.s2_block0(out)
+        if exit_point==0:
+            out0 = out
+            out0 = self.avg_pool0(out0)
+            out0 = self.fc0(out0)
+            out0 = F.softmax(out0, dim=1)
+            out0 = out0.view(out.shape[0], -1)
+            return out0
+
         out = self.s2_block1(out)
         out = self.s2_block2(out)
 
         out = self.avg_pool(out)
         out = self.fc(out)
         out = F.softmax(out, dim=1)
+        out = out.view(out.shape[0], -1)
 
-        return out.view(out.shape[0], -1)
+        return out
 
     def save(self, is_onnx=0, name="TCResNet8"):
         if (is_onnx):
@@ -104,10 +118,10 @@ class TCResNet8(nn.Module):
             torch.onnx.export(self, dummy_input, "TCResNet8.onnx", verbose=True, input_names=["input0"],
                               output_names=["output0"])
         else:
-            torch.save(self.state_dict(), "saved_model/"+name)
+            torch.save(self.state_dict(), ""+name)
 
     def load(self,name="TCResNet8"):
-        self.load_state_dict(torch.load("saved_model/"+name, map_location=lambda storage, loc: storage))
+        self.load_state_dict(torch.load(""+name, map_location=lambda storage, loc: storage))
 
 
 class TCResNet8_flatten(nn.Module):
@@ -148,7 +162,8 @@ class TCResNet8_flatten(nn.Module):
         self.conv_res0 = nn.Conv2d(in_channels=16, out_channels=24, kernel_size=(1, 9), stride=2,
                                   padding=(0, 4), bias=False)
         self.bn_res0 = nn.BatchNorm2d(24, affine=True)
-
+        self.early_fc_0 = nn.Conv2d(in_channels=int(32 * k), out_channels=10, kernel_size=1, padding=0,
+                            bias=False)
         # ############################   self.s2_block1 = S2_Block(int(24 * k), int(32 * k))
         self.conv1_0 = nn.Conv2d(in_channels=24, out_channels=32, kernel_size=(1, 9), stride=2,
                                padding=(0, 4), bias=False)
@@ -202,7 +217,12 @@ class TCResNet8_flatten(nn.Module):
         identity = F.relu(identity)
         out += identity
         out = F.relu(out)
-        # out0 = out
+        out0 = out
+
+        out0 = F.avg_pool2d(out0, (1,identity.size()[3]))
+        out0 = self.early_fc_1(out0)
+        out0 = F.softmax(out0, dim=1)
+        out0 = out0.view(out0.shape[0], -1)
 
         ########## s1 - 1 ########
         x1 = out
@@ -292,39 +312,6 @@ class TCResNet8_flatten(nn.Module):
         # out = F.softmax(out, dim=1)
         # out2 = out.view(out.shape[0], -1)
         # return [out0, out1, out2]
-
-    def forward_0(self, x):
-        out = self.conv_block(x)
-        out = self.s2_block0(out)
-        out = F.avg_pool2d(out, kernel_size = (1,51))
-        out = self.early_fc_0(out)
-        out = F.softmax(out, dim=1)
-        out = out.view(out.shape[0], -1)
-        return out
-
-    def forward_1(self, x):
-        with torch.no_grad():
-            out = self.conv_block(x)
-            out = self.s2_block0(out)
-        out = self.s2_block1(out)
-        out = F.avg_pool2d(out, kernel_size=(1, 26))
-        out = self.early_fc_1(out)
-        out = F.softmax(out, dim=1)
-        out = out.view(out.shape[0], -1)
-        return out
-
-    def forward_full(self, x):
-        # print("nn input shape: ",x.shape)
-        with torch.no_grad():
-            out = self.conv_block(x)
-            out = self.s2_block0(out)
-            out = self.s2_block1(out)
-        out = self.s2_block2(out)
-        out = F.avg_pool2d(out, kernel_size=(1, 13))
-        out = self.fc(out)
-        out = F.softmax(out, dim=1)
-        out = out.view(out.shape[0], -1)
-        return out
 
 
 
@@ -432,7 +419,7 @@ class S2_Block_minimize(nn.Module):
 
 if __name__ == "__main__":
     x = torch.rand(1, 40, 1, 101)
-    model_tcresnet8 = TCResNet8_minimize(1, 40, 10)
+    model_tcresnet8 = TCResNet8(1, 40, 10)
     # result_tcresnet8 = model_tcresnet8(x)
     # print(result_tcresnet8)
 

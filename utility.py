@@ -138,7 +138,9 @@ def train(model, loaders, num_epoch, args):
             ba = torch.zeros([e_count])
             b_hit = torch.zeros([e_count])
             for i in range(e_count):
-                b_hit[i] = float(torch.sum(torch.argmax(outs[i].value, 1) == label_kw).item())
+                if (not torch.is_tensor(outs[i])):
+                    outs[i] = outs[i].value
+                b_hit[i] = float(torch.sum(torch.argmax(outs[i], 1) == label_kw).item())
                 ba[i] = b_hit[i] / float(audio_data.shape[0]) * 100
                 train_kw_correct[i] += b_hit[i]
 
@@ -293,7 +295,8 @@ def partition_batch_idx(outs, label, thresh, ratio, exit_index, type=0):
     #
 
     out = outs[exit_index]
-    out = out.value
+    if (not torch.is_tensor(out)):
+        out = out.value
     par_batch_size = out.shape[0]
     # 按照ratio退出还是按照threshold
     max_prob_0, _ = out.max(dim=1)

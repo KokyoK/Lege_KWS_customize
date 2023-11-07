@@ -18,7 +18,7 @@ args = parser.parse_args()
 
 
 
-TRAIN = False
+TRAIN = True
 # ROOT_DIR = "../KWS_TCResNet/dataset/google_origin/"
 # WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
 ROOT_DIR = "dataset/lege/"
@@ -30,8 +30,8 @@ NUM_EPOCH = 500
 
 if __name__ == "__main__":
 
-    # model_fp32 = md.TCResNet8_flatten(k=1, n_mels=40, n_classes=len(WORD_LIST))
-    model_fp32 = mdq.QuantizedTCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST))
+    model_fp32 = md.TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST))
+    # model_fp32 = mdq.QuantizedTCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST))
     loaders = sd.kws_loaders(ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     # [train_loader, eval_loader, test_loader] = loaders
     if TRAIN :

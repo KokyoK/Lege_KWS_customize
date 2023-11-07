@@ -7,6 +7,7 @@ from thop import profile
 from collections import deque
 import matplotlib.pyplot as plt
 from model_quantize import *
+from model import *
 import model_quantize as mdq
 import speech_dataset as sd
 import gym
@@ -44,7 +45,9 @@ class EarlyExitEnv(gym.Env):
         self.total_inference_time = 0  # 总推断时间
         self.sample_count = 0  # 推断的样本数量
     def calculate_accuracy(self,p):
-        return float((p.value.argmax(dim=1) == self.label).item())
+        if (not torch.is_tensor(p)):
+            p=p.value
+        return float((p.argmax(dim=1) == self.label).item())
     def step(self, action):
         # 执行动作，这里的动作是选择 exit
         probabilities = self.neural_network.forward(x=self.state["feature"], exit_point=action)
@@ -229,17 +232,18 @@ if __name__ == "__main__":
     word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     speaker_list = []
     loaders = sd.kws_loaders(root_dir, word_list, speaker_list)
-    ee_model = QuantizedTCResNet8(1, 40, 10)
-    ee_model.load("../saved_model/lege_ee_189_infer_94.667.pt")
+    # ee_model = QuantizedTCResNet8(1, 40, 10)
+    ee_model = TCResNet8(1, 40, 10)
+    ee_model.load("../saved_model/lege_ee_float_96.333.pt")
     ee_model.eval()
 
-    env = EarlyExitEnv(ee_model, loaders[1], constraint=0.7)
+    env = EarlyExitEnv(ee_model, loaders[1], constraint=0.8)
     action_size = env.action_space.n    # 2, 从哪个exit出
     feat_shape = env.observation_space.spaces['feature'].shape  # 获取状态的实际形状
     # input_size = state_shape[1] * state_shape[2] * state_shape[3]  # 降维后的输入大小
     agent = Agent(feat_shape, action_size)  # 调整 Agent 的初始化
 
-    episodes = 500  # 训练回合数
+    episodes = 200  # 训练回合数
     scores = []  # 用于记录每个回合的总奖励
     average_inference_times = []  # 用于记录每个回合的平均推断时间
 
@@ -265,12 +269,12 @@ if __name__ == "__main__":
             # next_state = np.reshape(next_state, [1, input_size])  # 降维处理
             agent.remember(state, action, reward, next_state, done)
             state = next_state
-
+            # print(time)
             if done:
                 average_inference_time = total_inference_time / time  # 计算平均推断时间
                 average_inference_times.append(average_inference_time)  # 记录平均推断时间
                 if average_inference_time > env.constraint:
-                    score -= 100  # 如果平均推断时间超过约束，则给予负奖励
+                    score -= 1000*(average_inference_time - env.constraint)  # 如果平均推断时间超过约束，则给予负奖励
                 scores.append(score)  # 记录当前回合的总奖励
                 print(
                     f"Episode: {e}/{episodes}, Score: {score:.3f}, Avg ACC: {env.total_hit/time*100:.2f},Avg Time: {average_inference_time:.4f}, Epsilon: {agent.epsilon:.4}")
@@ -296,7 +300,7 @@ if __name__ == "__main__":
     # 测试模型
     # 测试模型
 
-    env.iterator = iter(loaders[2])
+    env.iterator = iter(loaders[1])
     for e in range(10):
         state = env.reset()
         score = 0  # 初始化当前回合的总奖励
@@ -315,7 +319,7 @@ if __name__ == "__main__":
                 average_inference_time = total_inference_time / time  # 计算平均推断时间
                 average_inference_times.append(average_inference_time)  # 记录平均推断时间
                 if average_inference_time > env.constraint:
-                    score -= 100  # 如果平均推断时间超过约束，则给予负奖励
+                    score -= 1000 * (average_inference_time - env.constraint)  # 如果平均推断时间超过约束，则给
                 scores.append(score)  # 记录当前回合的总奖励
                 print(
                     f"Test Episode: {e}, Score: {score:.3f}, Avg ACC: {env.total_hit / time * 100:.2f},Avg Time: {average_inference_time:.4f}")

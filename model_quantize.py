@@ -209,7 +209,8 @@ class QuantizedTCResNet8(nn.Module):
 
         # self.cache_inference_quant_bias = True
         # self.flops = torch.Tensor([0.3986, 1.0000])
-        self.flops = torch.Tensor([0.6080,1.18586])
+        self.flops = torch.Tensor([0.6080,1.18586]) # 算上agent
+
         self.quant_inp = qnn.QuantIdentity(bit_width=qa, return_quant_tensor=True)
 
         # self.conv_block_d = nn.Conv2d(in_channels=n_mels, out_channels=n_mels, kernel_size=(1, 3), stride=1,
