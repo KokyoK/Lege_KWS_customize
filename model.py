@@ -94,13 +94,13 @@ class TCResNet8(nn.Module):
         out = self.conv_block(x)
 
         out = self.s2_block0(out)
-        if exit_point==0:
-            out0 = out
-            out0 = self.avg_pool0(out0)
-            out0 = self.fc0(out0)
-            out0 = F.softmax(out0, dim=1)
-            out0 = out0.view(out.shape[0], -1)
-            return out0
+        # if exit_point==0:
+        out0 = out
+        out0 = self.avg_pool0(out0)
+        out0 = self.fc0(out0)
+        out0 = F.softmax(out0, dim=1)
+        out0 = out0.view(out.shape[0], -1)
+        # return out0
 
         out = self.s2_block1(out)
         out = self.s2_block2(out)
@@ -110,7 +110,7 @@ class TCResNet8(nn.Module):
         out = F.softmax(out, dim=1)
         out = out.view(out.shape[0], -1)
 
-        return out
+        return out0,out
 
     def save(self, is_onnx=0, name="TCResNet8"):
         if (is_onnx):

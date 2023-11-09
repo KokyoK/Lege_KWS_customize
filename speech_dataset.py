@@ -281,9 +281,9 @@ def kws_loaders(root_dir, word_list, speaker_list,name="Lege KWS"):
     dev_data = SpeechDataset(dev_files, "dev", ap, word_list, speaker_list)
     test_data = SpeechDataset(test_files, "test", ap, word_list, speaker_list)
 
-    train_dataloader = data.DataLoader(train_data, batch_size=1, shuffle=True)
-    dev_dataloader = data.DataLoader(dev_data, batch_size=1, shuffle=False)
-    test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=False)
+    train_dataloader = data.DataLoader(train_data, batch_size=16, shuffle=True)
+    dev_dataloader = data.DataLoader(dev_data, batch_size=16, shuffle=False)
+    test_dataloader = data.DataLoader(test_data, batch_size=16, shuffle=False)
     # return [train_dataloader,dev_dataloader,test_dataloader]
     print(f"{name}数据集")
     print(f"{name} 训练集大小:", len(train_data))
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
     # root_dir = "../dataset/huawei_modify/WAV_new/"
     # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
-    speaker_list = [speaker for speaker in os.listdir(root_dir ) if speaker.startswith("A") ]
+    speaker_list = [speaker for speaker in os.listdir(root_dir ) if (speaker.startswith("A") or speaker.startswith("B"))]
 
     
     ap = AudioPreprocessor()
