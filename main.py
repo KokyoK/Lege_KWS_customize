@@ -8,14 +8,14 @@ import torchaudio.functional as F_audio
 import torchaudio
 import torch
 import model as md
-from nn_main import WORD_LIST
+from nn_main import WORD_LIST,SPEAKER_LIST
 import torch.nn.functional as F
 import random
 import time
 torch.manual_seed(42)
 
 
-model = md.TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST))
+model = md.TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
 model.load()
 model.eval()
 model.mode = "eval"

@@ -1,3 +1,7 @@
+## Model Arch.
+
+![image](readme_images/1.png)
+
 ## Usage
 
 1. Create `dataset` and `saved_model `directories. 

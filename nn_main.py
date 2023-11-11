@@ -3,41 +3,38 @@ torch.manual_seed(42)
 import torch.utils.data as data
 import speech_dataset as sd
 # import utility as util
-import utility as util
+import utility_ee as util
 import model as md
-import model_quantize as mdq
-import argparse
 
-parser = argparse.ArgumentParser(description='Early-exit aware Training')
-parser.add_argument('--a', default=0.5, type=float,help='weight of exit samples')
-parser.add_argument('--dataset', default="lege", help='dataset name, options: "cifar10", "google_kws","lege_kws"')
-parser.add_argument('--opt_method', default="", help='optimization method\noptions: "heuristic", "ippp", "sa",\ndefault no method')
-parser.add_argument('--latency_constraint', default=0.7, type=float, help='latency constranit')
-parser.add_argument('--model_name', default="resnet32", help='model_name\noptions: "resnet32, "tcresnet8"')
-args = parser.parse_args()
-
+import os
 
 
 TRAIN = True
-# ROOT_DIR = "../KWS_TCResNet/dataset/google_origin/"
+# ROOT_DIR = "dataset/google_origin/"
 # WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+# ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
+# WORD_LIST = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
+
+# # SPEAKER_LIST = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A")]
 ROOT_DIR = "dataset/lege/"
 WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-SPEAKER_LIST=[]
+SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
+NUM_EPOCH = 5000
 
-
-NUM_EPOCH = 500
-
+print("dataset root:", ROOT_DIR)
+print("keyword number:", len(WORD_LIST))
+print("speaker number:", len(SPEAKER_LIST))
 if __name__ == "__main__":
-
-    model_fp32 = md.TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST))
-    # model_fp32 = mdq.QuantizedTCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST))
-    loaders = sd.kws_loaders(ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    # [train_loader, eval_loader, test_loader] = loaders
+    model_fp32 = md.TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
     if TRAIN :
-        util.train(model_fp32, loaders, NUM_EPOCH,args)
+        util.train(model_fp32, ROOT_DIR, WORD_LIST,SPEAKER_LIST, NUM_EPOCH)
+
     else:
-        util.evaluate_ee_testset(model_fp32, loaders[2],thresholds=[0.9,0],name="saved_model/lege_ee_189_infer_94.667.pt")
+        train, dev, test = sd.split_dataset(ROOT_DIR, WORD_LIST, SPEAKER_LIST)
+        ap = sd.AudioPreprocessor()
+        test_data = sd.SpeechDataset(test, "eval", ap, WORD_LIST)
+        test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=True)
+        util.evaluate_testset(model_fp32, test_dataloader)
         
 
 

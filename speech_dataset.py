@@ -10,7 +10,7 @@ import torch.nn as nn
 import numpy as np
 import torchaudio
 import random
-random.seed(42)
+
 import torch
 torch.manual_seed(42)
 import math
@@ -20,18 +20,38 @@ import math
 #     torch.cuda.set_device(geforce_rtx_3060_xc)
 def fetch_speaker_list(ROOT_DIR, WORD_LIST):
     speaker_list = []
-    if ROOT_DIR == "dataset/huawei_modify/WAV_new/":
-        return [speaker for speaker in sorted(os.listdir("dataset/huawei_modify/WAV/")) if speaker.startswith("A")]
+    if ROOT_DIR == "../EarlyExit/dataset/huawei_modify/WAV_new/":
+        available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
+        for i, word in enumerate(available_words):
+            if os.path.isdir(os.path.join(ROOT_DIR, available_words[i])):  # 排除.DS_store这种文件
+                if (word in WORD_LIST):
+                    for wav_file in os.listdir(ROOT_DIR + word):
+                        if wav_file.endswith(".wav"):
+                            id = wav_file.split("_", 1)[0]
+                            if (id not in speaker_list):
+                                speaker_list.append(id)
+    elif ROOT_DIR == "dataset/lege/":
+        available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
+        for i, word in enumerate(available_words):
+            if os.path.isdir(os.path.join(ROOT_DIR,available_words[i])):    # 排除.DS_store这种文件
+                if (word in WORD_LIST):
+                    for wav_file in os.listdir(ROOT_DIR + word):
+                        if wav_file.endswith(".wav"):
+                            id = wav_file.split("_", 1)[0]
+                            if (id not in speaker_list):
+                                speaker_list.append(id)
+            # else:
+
     elif ROOT_DIR == "dataset/google_origin/":
-        available_words = sorted(os.listdir(ROOT_DIR))  # 列出原数据集的words
+        available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if (word in WORD_LIST):
-                for wav_file in sorted(os.listdir(ROOT_DIR + word)):
+                for wav_file in os.listdir(ROOT_DIR + word):
                     if wav_file.endswith(".wav"):
                         id = wav_file.split("_", 1)[0]
                         if (id not in speaker_list):
                             speaker_list.append(id)
-        return speaker_list
+    return speaker_list
 
 
 def print_spectrogram(spectrogram, labels, word_list):
@@ -59,7 +79,7 @@ def get_all_data_length(root_dir):          # for debug
 
 
 
-def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 1]):
+def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
     """ Generates a list of paths for each sample and splits them into training, validation and test sets.
 
         Input(s):
@@ -89,30 +109,33 @@ def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 1]):
 
 
 
-    available_words = sorted(os.listdir(root_dir))  # 列出原数据集的words
+    available_words = os.listdir(root_dir)      # 列出原数据集的words
     for i, word in enumerate(available_words):
         if (word in word_list):
-            temp_set = []
-            for wav_file in sorted(os.listdir(root_dir + word)):
-                if wav_file.endswith(".wav"):
-                        temp_set.append((root_dir + word + "/" + wav_file, word,id))
+            for speaker in speaker_list:
+                temp_set = []
+                for wav_file in os.listdir(root_dir + word):
+                    if wav_file.endswith(".wav"):
+                        id = wav_file.split("_",1)[0]
+                        if (id == speaker):
+                            temp_set.append((root_dir + word + "/" + wav_file, word,id))
 
-            n_samples = len(temp_set)
-            n_train = int(n_samples * split_pct[0])
-            n_dev = int(n_samples * split_pct[1])
-        # If word samples are insufficient, re-use same data multiple times.
-        # This isn't ideal since validation/test sets might contain data from the training set.
-        # if (len(temp_set) < n_samples):
-        #     temp_set *= math.ceil(n_samples / len(temp_set))
-            temp_set = temp_set[:n_samples]
-            random.shuffle(temp_set)
-            train_set += temp_set[:n_train]
-            dev_set += temp_set[n_train:n_train + n_dev]
-            test_set += temp_set[n_train + n_dev:]
+                n_samples = len(temp_set)
+                n_train = int(n_samples * split_pct[0])
+                n_dev = int(n_samples * split_pct[1])
+            # If word samples are insufficient, re-use same data multiple times.
+            # This isn't ideal since validation/test sets might contain data from the training set.
+            # if (len(temp_set) < n_samples):
+            #     temp_set *= math.ceil(n_samples / len(temp_set))
+                temp_set = temp_set[:n_samples]
+                random.shuffle(temp_set)
+                train_set += temp_set[:n_train]
+                dev_set += temp_set[n_train:n_train + n_dev]
+                test_set += temp_set[n_train + n_dev:]
 
         elif ((word != "_background_noise_") and ("unknown" in word_list)):  # Adding unknown words
             if os.path.isdir(root_dir + word):  # 排除缓存文件e.g. .DS_Store
-                for wav_file in sorted(os.listdir(root_dir + word)):
+                for wav_file in os.listdir(root_dir + word):
                     if wav_file.endswith(".wav"):
                         temp_set = [(root_dir + word + "/" + wav_file, "unknown")]
                         unknown_list += temp_set
@@ -134,8 +157,8 @@ def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 1]):
 
     # Adding silence category
     if ("silence" in word_list):
-        temp_set = [(root_dir + "_background_noise_" + "/" + wav_file, "silence") for wav_file in sorted(os.listdir(root_dir \
-                                                                                                             + "_background_noise_"))
+        temp_set = [(root_dir + "_background_noise_" + "/" + wav_file, "silence") for wav_file in os.listdir(root_dir \
+                                                                                                             + "_background_noise_")
                     if wav_file.endswith(".wav")]
         # if (len(temp_set) < n_samples):
         #     temp_set *= math.ceil(n_samples / len(temp_set))
@@ -212,7 +235,7 @@ class SpeechDataset(data.Dataset):
         if self.is_noisy:
             out_data += 0.01 * torch.randn(out_data.shape)
         
-        return (out_data, data_element[1])
+        return (out_data, data_element[1],data_element[2])
 
 
 
@@ -223,7 +246,7 @@ class SpeechDataset(data.Dataset):
     def __getitem__(self, idx):
         # print(self.data_list[idx])
         cur_element = self.load_data(self.data_list[idx])
-        cur_element = (cur_element[0], self.word_list.index(cur_element[1]))
+        cur_element = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
         return self.transforms(cur_element)
 
 
@@ -246,7 +269,7 @@ class AudioPreprocessor():
 
         self.mfcc = nn.Sequential(
             torchaudio.transforms.MFCC(
-                sample_rate=16000,
+                sample_rate=24000,
                 n_mfcc=40,
                 dct_type=2,
                 norm='ortho',
@@ -270,47 +293,28 @@ class AudioPreprocessor():
         # Set Filters as channels
         o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
         # print(o_data.shape,data[1])
-        return o_data, data[1]
+        return o_data, data[1],data[2]
 
-def kws_loaders(root_dir, word_list, speaker_list,name="Lege KWS"):
-    # Loading dataset
-    ap = AudioPreprocessor()  # Computes Log-Mel spectrogram
-    train_files, dev_files, test_files = split_dataset(root_dir, word_list, speaker_list)
-
-    train_data = SpeechDataset(train_files, "train", ap, word_list, speaker_list)
-    dev_data = SpeechDataset(dev_files, "dev", ap, word_list, speaker_list)
-    test_data = SpeechDataset(test_files, "test", ap, word_list, speaker_list)
-
-    train_dataloader = data.DataLoader(train_data, batch_size=16, shuffle=True)
-    dev_dataloader = data.DataLoader(dev_data, batch_size=16, shuffle=False)
-    test_dataloader = data.DataLoader(test_data, batch_size=16, shuffle=False)
-    # return [train_dataloader,dev_dataloader,test_dataloader]
-    print(f"{name}数据集")
-    print(f"{name} 训练集大小:", len(train_data))
-    print(f"{name} 验证集大小:", len(dev_data))
-    print(f"{name} 测试集大小:", len(test_data))
-    return [train_dataloader,dev_dataloader,test_dataloader]
 
 if __name__ == "__main__":
     # Test example
     root_dir = "dataset/lege/"
     word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-    # root_dir = "../dataset/google_origin/"
-    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
-    # root_dir = "../dataset/huawei_modify/WAV_new/"
+    speaker_list = fetch_speaker_list(root_dir,word_list)
+    # root_dir = "dataset/google_origin/"
+    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "silence"]
+    # root_dir = "dataset/huawei_modify/WAV_new/"
     # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
-    speaker_list = [speaker for speaker in os.listdir(root_dir ) if (speaker.startswith("A") or speaker.startswith("B"))]
+    # speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
 
     
     ap = AudioPreprocessor()
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
 
-    print()
-
     # Dataset
     train_data = SpeechDataset(train, "train", ap, word_list,speaker_list)
-    dev_data = SpeechDataset(dev, "dev", ap, word_list,speaker_list)
-    test_data = SpeechDataset(test, "test", ap, word_list,speaker_list)
+    dev_data = SpeechDataset(dev, "train", ap, word_list,speaker_list)
+    test_data = SpeechDataset(test, "train", ap, word_list,speaker_list)
     # Dataloaders
     train_dataloader = data.DataLoader(train_data, batch_size=1, shuffle=False)
     dev_dataloader = data.DataLoader(dev_data, batch_size=1, shuffle=False)
