@@ -1,42 +1,62 @@
-import pyaudio
-import wave
-import time
 
-# 非阻塞式录音，省略import语句
-path = "record.wav"
-data_list = []  # 录制用list会好一点，因为bytes是常量，+操作会一直开辟新存储空间，时间开销大
 
-def callback(in_data, frame_count, time_info, status):
-    data_list.append(in_data)
-    # output=False时数据可以直接给b""，但是状态位还是要保持paContinue，如果是paComplete一样会停止录制
-    return b"", pyaudio.paContinue
+############# 打印参数，prepare for C
+import sys
+import torch
+torch.manual_seed(42)
+import torch.utils.data as data
+import speech_dataset as sd
+# import utility as util
+import utility_ee as util
+import model as md
 
-record_seconds = 3  # 录制时长/秒
-pformat = pyaudio.paInt16
-channels = 1
-rate = 16000  # 采样率/Hz
 
-audio = pyaudio.PyAudio()
-stream = audio.open(format=pformat,
-                    channels=channels,
-                    rate=rate,
-                    input=True,
-                    stream_callback=callback)
+def format_tensor(tensor, precision=5):
+    """递归格式化张量为字符串，保留指定的小数位数。"""
+    if tensor.dim() == 0:
+        return f'{tensor.item():.{precision}f}'
+    elements = [format_tensor(t, precision) for t in tensor]
+    return '{' + ', '.join(elements) + '}'
+def record_para(model):
+    savedStdout = sys.stdout  # 保存标准输出流
+    file =  open('paras.txt', 'w+')
+    sys.stdout = file  # 标准输出重定向至文件
 
-stream.start_stream()
+    s = model.state_dict()
+    i = 0
+    j = 0
+    import torch
 
-t1 = time.time()
-# 录制在stop_stream之前应该都是is_active()的，所以这里不能靠它来判断录制是否结束
-while time.time() - t1 < record_seconds:
-    time.sleep(0.1)
 
-wav_data = b"".join(data_list)
-with wave.open("tmp.wav", "wb") as wf:
-    wf.setnchannels(channels)
-    wf.setsampwidth(pyaudio.get_sample_size(pformat))
-    wf.setframerate(rate)
-    wf.writeframes(wav_data)
 
-stream.stop_stream()
-stream.close()
-audio.terminate()
+
+    for key in s:
+        block_name = key.replace(".","_")
+        para = s[key].squeeze()
+        # 四舍五入到四位小数
+        # para = torch.round(para * 10000) / 10000
+        data_str = format_tensor(para)
+        # print(block_name)
+
+        if(len(para.shape) == 3):
+            print(f"const WDT {block_name}[{para.shape[0]}][{para.shape[1]}][{para.shape[2]}] = {data_str};")
+        elif(len(para.shape) == 2):
+            print(f"const WDT {block_name}[{para.shape[0]}][{para.shape[1]}] = {data_str};")
+        elif(len(para.shape) == 1):
+            print(f"const WDT {block_name}[{para.shape[0]}] = {data_str};")
+
+
+if __name__ == "__main__":
+    ROOT_DIR = "dataset/lege/"
+    WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
+    SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
+
+    model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
+    model_fp32.load("sim_244_kwsacc_92.08_idloss_0.0728")
+    model_fp32.eval()
+
+    model = model_fp32.network
+    model.eval()
+
+    # model.eval()
+    record_para(model)

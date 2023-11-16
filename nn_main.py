@@ -19,22 +19,22 @@ TRAIN = True
 ROOT_DIR = "dataset/lege/"
 WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
 SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
-NUM_EPOCH = 5000
+NUM_EPOCH = 1000
 
 print("dataset root:", ROOT_DIR)
 print("keyword number:", len(WORD_LIST))
 print("speaker number:", len(SPEAKER_LIST))
 if __name__ == "__main__":
-    model_fp32 = md.TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
+    model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
+
+    loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+
     if TRAIN :
-        util.train(model_fp32, ROOT_DIR, WORD_LIST,SPEAKER_LIST, NUM_EPOCH)
+        util.train(model_fp32, NUM_EPOCH,loaders)
 
     else:
-        train, dev, test = sd.split_dataset(ROOT_DIR, WORD_LIST, SPEAKER_LIST)
-        ap = sd.AudioPreprocessor()
-        test_data = sd.SpeechDataset(test, "eval", ap, WORD_LIST)
-        test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=True)
-        util.evaluate_testset(model_fp32, test_dataloader)
+
+        util.evaluate_testset(model_fp32, loaders[2])
         
 
 

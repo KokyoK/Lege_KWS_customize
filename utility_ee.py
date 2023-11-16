@@ -11,7 +11,7 @@ time_check = True
 
 # train_on_gpu = False
 time_check = False
-
+device = "cuda" if train_on_gpu else "cpu"
 
 
 
@@ -74,166 +74,135 @@ class OrgLoss(nn.Module):
         super().__init__()
 
 
-    def forward(self, map_k, map_s,Share_W, Kws_P,Speaker_P):
+    def forward(self,Share_W, Kws_P,Speaker_P):
         # mul = torch.matmul(map_k.squeeze(dim=2), map_s.squeeze(dim=2).permute(0,2,1))
         # o_loss = torch.norm(mul, p='fro') ** 2 / (48*48)
         o_loss = ((torch.norm(Share_W @ Kws_P.T, p='fro') + torch.norm(Share_W @ Speaker_P.T, p='fro')) ** 2) / (
                 Share_W.data.shape[0] * Kws_P.data.shape[1])
         return o_loss
 
-def train(model, root_dir, word_list, speaker_list,num_epoch):
+def train(model, num_epochs, loaders):
     """
-    Trains TCResNet
-    """
+    Trains and validates the model.
 
-    # Enable GPU training
+    Args:
+    model: The PyTorch model to be trained.
+    num_epochs: Number of epochs to train for.
+    loaders: List of DataLoaders (train, validation, test).
+    device: The device to train on ('cuda' or 'cpu').
+    """
     if train_on_gpu:
-        model.cuda()
-    
-    # Loading dataset
-    ap = sd.AudioPreprocessor() # Computes Log-Mel spectrogram
-    train_files, dev_files, test_files = sd.split_dataset(root_dir, word_list,speaker_list )
+        model.to(device)
 
-    train_data = sd.SpeechDataset(train_files, "train", ap, word_list,speaker_list)
-    dev_data = sd.SpeechDataset(dev_files, "dev", ap, word_list,speaker_list)
-    test_data = sd.SpeechDataset(test_files, "test", ap, word_list,speaker_list)
+    [train_dataloader, dev_dataloader, test_dataloader] = loaders
 
-    train_dataloader = data.DataLoader(train_data, batch_size=16, shuffle=True)
-    # dev_dataloader = data.DataLoader(dev_data, batch_size=16, shuffle=True)
-    dev_dataloader = data.DataLoader(test_data, batch_size=16, shuffle=True)
-    test_dataloader = data.DataLoader(test_data, batch_size=16, shuffle=True)
+    criterion_kws = nn.CrossEntropyLoss()  # For keyword spotting
+    criterion_speaker = nn.TripletMarginLoss(margin=1.0, p=2)  # For speaker identification
+    criterion_orth = OrgLoss()  # Custom orthogonal loss
 
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    prev_kws_acc = 0
+    prev_speaker_loss = 999
 
-    criterion = nn.CrossEntropyLoss()
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3,weight_decay=1e-5)
-    OLoss = OrgLoss()
-    # Training
-    step_idx = 0
-    valid_accuracy = 0
-    previous_valid_accuracy = 0
-
-    for epoch in range(num_epoch):
-
-        train_loss = 0.0
-        valid_loss = 0.0
-        valid_kw_correct = 0
-        valid_id_correct = 0
-        train_kw_correct = 0
-        train_id_correct = 0
-
-
+    for epoch in range(num_epochs):
         model.train()
+        total_train_loss = 0
+        total_train_loss_kws = 0
+        total_train_loss_speaker = 0
+        total_train_loss_orth = 0
+        total_correct_kws = 0
+        total_samples = 0
 
-        for batch_idx, (audio_data,label_kw, label_id) in enumerate(train_dataloader):
-            if train_on_gpu:
-                audio_data = audio_data.cuda()
-                label_kw = label_kw.cuda()
-                label_id = label_id.cuda()
+        for batch_idx, batch in enumerate(train_dataloader):
+            anchor_batch, positive_batch, negative_batch = batch
+            anchor_data, anchor_kws_label, _ = anchor_batch
+            positive_data, _, _ = positive_batch
+            negative_data, _, _ = negative_batch
+
+            anchor_data, anchor_kws_label = anchor_data.to(device), anchor_kws_label.to(device)
+            positive_data = positive_data.to(device)
+            negative_data = negative_data.to(device)
 
             optimizer.zero_grad()
 
-            out_kw, out_id, map_kw, map_s = model(x=audio_data)
+            anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
-            # cal_loss
+            loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
+            loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
+            loss_orth = criterion_orth(model.network.share_para, model.network.kws_para, model.network.speaker_para)
+            loss = loss_kws + loss_speaker + loss_orth
 
-            loss_kw = criterion(out_kw, label_kw)
-            loss_id = criterion(out_id, label_id)
-            loss_o = OLoss(map_kw,map_s,model.share_para, model.kws_para, model.speaker_para)
-            # loss_full = 1.5*loss_id + 0.5*loss_kw + loss_o
-            loss_full = loss_id
-
-
-            with torch.autograd.set_detect_anomaly(True):
-                loss_full.backward(retain_graph=True)
-                # loss_kw.backward(retain_graph=True)
-                # loss_id.backward(retain_graph=True)
-                # loss_o.backward(retain_graph=True)
-            loss = loss_kw
-
+            loss.backward()
             optimizer.step()
 
-            train_loss += loss.item()*audio_data.size(0)
-            kw_batch_accuracy = float(torch.sum(torch.argmax(out_kw, 1) == label_kw).item()) / float(audio_data.shape[0])
-            id_batch_accuracy = float(torch.sum(torch.argmax(out_id, 1) == label_id).item()) / float(audio_data.shape[0])
-            
-            if (batch_idx%100 == 0):
-                print("Epoch {} | Train step #{}   | Loss_ALL: {:.4f} | Loss Otho {:.4f}  | KWS ACC: {:.4f} | SPEAKER ACC: {:.4f} ".format(epoch, step_idx, loss, loss_o,kw_batch_accuracy, id_batch_accuracy))
+            total_train_loss += loss.item()
+            total_train_loss_kws += loss_kws.item()
+            total_train_loss_speaker += loss_speaker.item()
+            total_train_loss_orth += loss_orth.item()
+            total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
+            total_samples += anchor_kws_label.size(0)
 
-            train_kw_correct += torch.sum(torch.argmax(out_kw, 1) == label_kw).item()
-            train_id_correct += torch.sum(torch.argmax(out_id, 1) == label_id).item()
-            step_idx += 1
+            if batch_idx % 50 == 0:
+                print(f'Epoch {epoch+1}| Step {batch_idx+1}| Loss KWS: {loss_kws.item():.4f}| Loss Speaker: {loss_speaker.item():.4f}| Loss Orth: {loss_orth.item():.4f}| Total Loss: {loss.item():.4f}| KWS Acc: {100 * torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item() / anchor_kws_label.size(0):.2f}%')
 
+        avg_train_loss = total_train_loss / len(train_dataloader)
+        train_accuracy = total_correct_kws / total_samples * 100
 
-        # Validation (1 epoch)
+        # Validation
         model.eval()
-        model.mode = "eval"
-        total_infer_time = 0
+        total_valid_loss = 0
+        total_valid_loss_kws = 0
+        total_valid_loss_speaker = 0
+        total_valid_loss_orth = 0
+        total_correct_kws = 0
+        total_samples = 0
 
-        for batch_idx, (audio_data, label_kw, label_id) in enumerate(dev_dataloader):
-            if train_on_gpu:
-                audio_data = audio_data.cuda()
-                label_kw = label_kw.cuda()
-                label_id = label_id.cuda()
+        with torch.no_grad():
+            for batch in dev_dataloader:
+                anchor_batch, positive_batch, negative_batch = batch
+                anchor_data, anchor_kws_label, _ = anchor_batch
+                positive_data, _, _ = positive_batch
+                negative_data, _, _ = negative_batch
 
-            optimizer.zero_grad()
+                anchor_data, anchor_kws_label = anchor_data.to(device), anchor_kws_label.to(device)
+                positive_data = positive_data.to(device)
+                negative_data = negative_data.to(device)
 
-            out_kw, out_id, map_kw, map_s = model(x=audio_data)
+                optimizer.zero_grad()
 
-            # cal_loss
-            loss_kw = criterion(out_kw, label_kw)
-            loss_id = criterion(out_id, label_id)
-            loss_o = OLoss(map_kw,map_s,model.share_para, model.kws_para, model.speaker_para)
-            loss_full = loss_id + loss_kw + loss_o
+                anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data,
+                                                                                                       positive_data,
+                                                                                                       negative_data)
 
-            loss = loss_full
+                loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
+                loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
+                loss_orth = criterion_orth(model.network.share_para, model.network.kws_para, model.network.speaker_para)
+                loss = loss_kws + loss_speaker + loss_orth
 
-            train_loss += loss.item() * audio_data.size(0)
-            kw_batch_accuracy = float(torch.sum(torch.argmax(out_kw, 1) == label_kw).item()) / float(
-                audio_data.shape[0])
-            id_batch_accuracy = float(torch.sum(torch.argmax(out_id, 1) == label_id).item()) / float(
-                audio_data.shape[0])
+                total_valid_loss += loss.item()
+                total_valid_loss_kws += loss_kws.item()
+                total_valid_loss_speaker += loss_speaker.item()
+                total_valid_loss_orth += loss_orth.item()
+                total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
+                total_samples += anchor_kws_label.size(0)
 
-            if (batch_idx % 100 == 0):
-                print(
-                    "Epoch {} | Eval  step #{}   | Loss: {:.4f}  | KWS ACC: {:.4f} | SPEAKER ACC: {:.4f} ".format(epoch,
-                                                                                                                  step_idx,
-                                                                                                                  loss,
-                                                                                                                  kw_batch_accuracy,
-                                                                                                                  id_batch_accuracy))
+        avg_valid_loss = total_valid_loss / len(dev_dataloader)
+        valid_accuracy = total_correct_kws / total_samples * 100
+        print(f"###################################    Epoch {epoch+1}/{num_epochs}     ###########################")
+        print(f' Train Accuracy KWS: {train_accuracy:.2f}%  ｜ Train Loss: {avg_train_loss:.4f}')
+        print(f' Valid Accuracy KWS: {valid_accuracy:.2f}%  ｜ Valid Loss: {avg_valid_loss:.4f}')
+        print(f'Train Loss KWS: {total_train_loss_kws / len(train_dataloader):.4f}｜ Train Loss Speaker: {total_train_loss_speaker / len(train_dataloader):.4f}｜ Train Loss Orth: {total_train_loss_orth / len(train_dataloader):.4f}')
+        print(f'Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}｜ Valid Loss Speaker: {total_valid_loss_speaker / len(dev_dataloader):.4f}｜ Valid Loss Orth: {total_valid_loss_orth / len(dev_dataloader):.4f}')
+        # print(f'Total Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}')
+        print(f"################################################################")
+        speaker_loss = total_valid_loss_speaker / len(dev_dataloader)
+        if (speaker_loss < prev_speaker_loss ):
+            model.save(name=f"sim_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}")
+            prev_kws_acc = valid_accuracy
+            prev_speaker_loss = speaker_loss
+    print("Training complete.")
 
-            valid_kw_correct += torch.sum(torch.argmax(out_kw, 1) == label_kw).item()
-            valid_id_correct += torch.sum(torch.argmax(out_id, 1) == label_id).item()
-            step_idx += 1
+# Example usage:
+# model = YourModel()
+# train_and_validate(model, num_epochs, loaders, device='cuda' if torch.cuda.is_available() else 'cpu')
 
-        # Loss statistics
-        train_loss = train_loss/len(train_dataloader.dataset)
-        valid_loss = valid_loss/len(dev_dataloader.dataset)
-        train_kw_accuracy = 100.0 * (train_kw_correct / len(train_dataloader.dataset))
-        train_id_accuracy = 100.0 * (train_id_correct / len(train_dataloader.dataset))
-        valid_kw_accuracy = 100.0 * (valid_kw_correct / len(dev_dataloader.dataset))
-        valid_id_accuracy = 100.0 * (valid_id_correct / len(dev_dataloader.dataset))
-        # print(output.shape)
-        # f1_scores = f1_score(labels, torch.max(output.detach(), 1)[0], average=None, )
-        # print(f1_scores)
-        print("===========================================================================")
-        print("EPOCH #{}     | TRAIN KWS ACC: {:.2f}% | TRAIN SPEAKER ACC: {:.2f}% | TRAIN LOSS : {:.2f}".format(epoch, train_kw_accuracy,train_id_accuracy , train_loss))
-        print("             | VAL KWS ACC :  {:.2f}% | VAL   SPEAKER ACC: {:.2f}% | VAL LOSS   : {:.2f}".format(valid_kw_accuracy, valid_id_accuracy, valid_loss))
-        # print("Validation path count:   ", path_count)
-        # print("Validation set inference time:    ",total_infer_time/len(dev_dataloader.dataset))
-        print("===========================================================================")
-        
-        if (valid_id_accuracy > previous_valid_accuracy):
-            previous_valid_accuracy = valid_id_accuracy
-            print("Saving current model...")
-            model.save()
-            model.save(is_onnx=0, name=f'e_{epoch}_kw_{valid_kw_accuracy:.3f}_valloss_{valid_id_accuracy:.3f}_.pt')
-            # model.save(is_onnx=0,name='saved_model/w{}b{}_e_{}_valacc_{:.3f}_valloss_{:.3f}_.pt'.format(md.qw,md.qa,epoch,valid_accuracy,valid_loss))
-            # torch.save(quantized_model.state_dict(), 'saved_model/q_epoch_{}_valacc_{:.3f}_valloss_{:.3f}_.pth'.format(epoch,valid_accuracy,valid_loss))
-
-        # Update scheduler (for decaying learning rate)
-        # scheduler.step()
-
-    # Final test
-    evaluate_testset(model, test_dataloader)
-    

@@ -267,23 +267,7 @@ class AudioPreprocessor():
             torchaudio.transforms.AmplitudeToDB()
         )
 
-        self.mfcc = nn.Sequential(
-            torchaudio.transforms.MFCC(
-                sample_rate=24000,
-                n_mfcc=40,
-                dct_type=2,
-                norm='ortho',
-                log_mels=False,
-                melkwargs= {
-                    "n_fft":480,          # window length = 30,
-                    "hop_length":160,     # stride = 10
-                    "f_min":0,
-                    "f_max":8000,
-                    "n_mels":40,
-                    "window_fn":torch.hann_window}
-            ),
-            torchaudio.transforms.AmplitudeToDB()
-        )
+
 
     def __call__(self, data):
         # print(data[0].shape)
@@ -296,6 +280,135 @@ class AudioPreprocessor():
         return o_data, data[1],data[2]
 
 
+import itertools
+
+def generate_triplets(dataset, num_anchors_per_sample=5):
+    """
+    Generates a list of triplets for training with triplet loss.
+    Each triplet consists of an anchor, a positive, and a negative sample.
+    Anchor and positive are from the same speaker but different words,
+    while anchor and negative are from different speakers.
+
+    Args:
+        dataset (SpeechDataset): The dataset to generate triplets from.
+        num_anchors_per_sample (int): Number of times each sample is used as an anchor.
+
+    Returns:
+        list of tuples: List containing triplets in the form (anchor, positive, negative).
+    """
+    triplets = []
+
+    for anchor in dataset.data_list:
+        anchor_speaker = anchor[2]  # Extracting speaker ID of the anchor
+
+        # Selecting samples with the same speaker but different word for positive
+        positive_candidates = [item for item in dataset.data_list if item[2] == anchor_speaker and item[1] != anchor[1]]
+        # Selecting samples with different speakers for negative
+        negative_candidates = [item for item in dataset.data_list if item[2] != anchor_speaker]
+
+        if len(positive_candidates) == 0 or len(negative_candidates) == 0:
+            continue
+
+        # Randomly choosing different positives and negatives for each anchor
+        for _ in range(num_anchors_per_sample):
+            positive = random.choice(positive_candidates)
+            negative = random.choice(negative_candidates)
+            triplets.append((anchor, positive, negative))
+
+    return triplets
+# Example of how to use the function
+class TripletSpeechDataset(data.Dataset):
+    def __init__(self, triplet_list, dataset_type, transforms, word_list, speaker_list, is_noisy=False, is_shift=False,
+                 sample_length=16000):
+        self.triplet_list = triplet_list
+        self.transforms = transforms
+        self.dataset_type = dataset_type
+        self.is_noisy = is_noisy
+        self.is_shift = is_shift
+        self.sample_length = sample_length
+        self.transforms = transforms
+        self.word_list = word_list
+        self.speaker_list = speaker_list
+    def __len__(self):
+        return len(self.triplet_list)
+
+    def __getitem__(self, idx):
+        anchor, positive, negative = self.triplet_list[idx]
+        triplet =  [anchor,positive,negative]
+        # Load and transform each part of the triplet
+        for i in range(len(triplet)):
+            cur_element = self.load_data(triplet[i])
+            triplet[i] = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
+            # positive_data = self.load_data(positive)
+            # negative_data = self.load_data(negative)
+
+        if self.transforms:
+            anchor_data = self.transforms(triplet[0])
+            positive_data = self.transforms(triplet[1])
+            negative_data = self.transforms(triplet[2])
+
+
+
+
+        return anchor_data, positive_data, negative_data
+
+    def load_data(self, data_element):
+        """ Loads audio, shifts data and adds noise. """
+        # print(data_element)
+        wav_data = torchaudio.load(data_element[0])[0]
+        wav_data = F_audio.resample(wav_data, 16000, 8000)  # @NOTE: 下采样到8000，部署的时候改原采样率
+
+        # Background noise used for silence needs to be shortened to 1 second.
+        if (data_element[1] == "silence"):
+            slice_idx = random.randint(0, wav_data.view(-1).shape[0] - self.sample_length - 1)
+            amplitude = random.random()
+            out_data = amplitude * wav_data[:, slice_idx:slice_idx + self.sample_length]
+        else:
+            out_data = 1 * wav_data
+        # print(out_data.shape)
+
+        data_len = 16000
+        # Pad smaller audio files with zeros to reach 1 second (16_000 samples)
+        if (out_data.shape[1] < data_len):
+            out_data = F.pad(out_data, pad=(0, (data_len - out_data.shape[1])), mode='constant', value=0)
+
+        # Clip larger audio files with zeros to reach 1 second (16_000 samples)
+        if (out_data.shape[1] > data_len):
+            t = out_data.shape[1] - data_len
+            out_data = out_data[:, t:data_len + t]
+
+        # print(out_data.shape)
+        # Adds audio shift (upto 100 ms)
+        if self.is_shift:
+            out_data = self.shift_audio(out_data)
+
+        # Add random noise
+        if self.is_noisy:
+            out_data += 0.01 * torch.randn(out_data.shape)
+
+        return (out_data, data_element[1], data_element[2])
+
+
+def get_loaders( root_dir, word_list,speaker_list):
+    train, dev, test = split_dataset(root_dir, word_list, speaker_list)
+    ap = AudioPreprocessor()
+    train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
+    dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
+    test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
+
+    train_trip = generate_triplets(train_data)
+    train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
+    dev_trip = generate_triplets(dev_data)
+    dev_trip_dataset = TripletSpeechDataset(dev_trip, "train", ap, word_list, speaker_list)
+    test_trip = generate_triplets(test_data)
+    test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
+
+    train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=16, shuffle=True)
+    dev_trip_loader = data.DataLoader(test_trip_dataset, batch_size=16, shuffle=True)
+    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=16, shuffle=True)
+
+    return [train_trip_loader, test_trip_loader, test_trip_loader]
+
 if __name__ == "__main__":
     # Test example
     root_dir = "dataset/lege/"
@@ -306,7 +419,7 @@ if __name__ == "__main__":
     # root_dir = "dataset/huawei_modify/WAV_new/"
     # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
     # speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
-
+    loaders = get_loaders(root_dir, word_list, speaker_list)
     
     ap = AudioPreprocessor()
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
@@ -317,20 +430,28 @@ if __name__ == "__main__":
     test_data = SpeechDataset(test, "train", ap, word_list,speaker_list)
     # Dataloaders
     train_dataloader = data.DataLoader(train_data, batch_size=1, shuffle=False)
-    dev_dataloader = data.DataLoader(dev_data, batch_size=1, shuffle=False)
-    test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=False)
-    # Dataloader tests
-    # train_spectrogram, train_labels = next(iter(train_dataloader))
-    # print_spectrogram(train_spectrogram, train_labels, word_list)
-    print(len(train_dataloader), len(dev_dataloader),len(test_dataloader))
-    get_all_data_length(root_dir)
+    # dev_dataloader = data.DataLoader(dev_data, batch_size=1, shuffle=False)
+    # test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=False)
+
+    train_trip = generate_triplets(train_data)
+    train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list,speaker_list)
+
+    # 假设您已经有了一个包含三元组的列表 `triplets`
+
+    train_trip_loader = data.DataLoader(train_trip_dataset,batch_size= 16, shuffle=True)
+
+    # 在训练循环中使用 DataLoader
+    for i,batch in enumerate(train_trip_loader):
+        (anchor, positive, negative) = batch
+        # 计算三元损失，进行训练等
+        break
 
 
-    Bar = enumerate(train_dataloader)
     # print(len()
-    for i, data in Bar:
-        # print(train_labels,id)
+    for i, data in enumerate(train_dataloader):
         print(data)
+        # print(train_labels,id)
+        # print(data)
         # if train_spectrogram.shape !=
         # train_spectrogram, train_labels = next(iter(train_dataloader))
         # train_spectrogram, train_labels = np.array(train_spectrogram), np.array(train_labels)
@@ -342,7 +463,7 @@ if __name__ == "__main__":
         # print(train_spectrogram.shape)
         # train_spectrogram, train_labels = next(iter(train_dataloader))
         # print(train_spectrogram.shape,train_labels.shape)
-        break
+        # break
 
 
 
