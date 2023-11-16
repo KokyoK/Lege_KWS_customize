@@ -1,5 +1,7 @@
 import os
 
+import model_sinc
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from numpy.lib.function_base import i0
 import torch.utils.data as data
@@ -266,18 +268,24 @@ class AudioPreprocessor():
             ),
             torchaudio.transforms.AmplitudeToDB()
         )
+        self.audio_sinc = model_sinc.AudioNet()
 
 
 
     def __call__(self, data):
         # print(data[0].shape)
-        o_data = self.spectrogram(data[0])
+        # o_data = self.spectrogram(data[0])
+        # o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
+
+        # o_data = self.audio_sinc(data[0])
+        # o_data = o_data.permute(0,2,1)
+
         # o_data = self.mfcc(data[0])
         # print(o_data[0].shape)
         # Set Filters as channels
-        o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
+
         # print(o_data.shape,data[1])
-        return o_data, data[1],data[2]
+        return data[0], data[1],data[2]
 
 
 import itertools
@@ -392,6 +400,7 @@ class TripletSpeechDataset(data.Dataset):
 def get_loaders( root_dir, word_list,speaker_list):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
+    # ap = model_sinc.AudioNet()
     train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
     dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
     test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
