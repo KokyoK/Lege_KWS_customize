@@ -1,5 +1,6 @@
 import torch
 torch.manual_seed(42)
+import torch.nn.functional as F
 import torch.nn as nn
 import torch.utils.data as data
 import speech_dataset as sd
@@ -26,48 +27,51 @@ else:
 
 
 
+import numpy as np
+from sklearn.metrics import roc_curve
 def evaluate_testset(model, test_dataloader):
-    # Final test
-    test_loss = 0.0
-    test_correct = 0.0
-    model.load()
-    model.eval()
-    total_infer_time = 0
-    path_count = [0,0,0]
-    total_flops = 0
+    model.eval()  # Set the model to evaluation mode
+    all_scores = []
+    all_labels = []
 
-    criterion = nn.CrossEntropyLoss()
-     
-    for batch_idx, (audio_data, labels) in enumerate(test_dataloader):
+    with torch.no_grad():
+        for batch_idx, (anchor_batch, positive_batch, negative_batch) in enumerate(test_dataloader):
+            anchor_data, _, _ = anchor_batch
+            positive_data, _, _ = positive_batch
+            negative_data, _, _ = negative_batch
 
-        if train_on_gpu:
-            model.cuda()
-            audio_data = audio_data.cuda()
-            labels = labels.cuda()
+            if train_on_gpu:
+                anchor_data = anchor_data.cuda()
+                positive_data = positive_data.cuda()
+                negative_data = negative_data.cuda()
 
-        output = model(audio_data)
-        
-        loss = criterion(output, labels)
-        test_loss += loss.item()*audio_data.size(0)
-        test_correct += (torch.sum(torch.argmax(output, 1) == labels).item())
+            _, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
+            # 计算说话人之间的相似度分数
+            # scores = F.cosine_similarity(anchor_out_speaker, positive_out_speaker)
+            scores = -torch.norm(anchor_out_speaker - positive_out_speaker, p=2)
 
+            # 标签为 1 表示同一个说话人，0 表示不同说话人
+            all_scores.append(float(scores.cpu().numpy()))
+            all_labels.append([1])
 
-        if(time_check):
-            torch.cuda.synchronize()
-            elapsed_time = start.elapsed_time(end)
-            total_infer_time += elapsed_time
+            # 你也可以加入 negative pair 的分数和标签
+            # _, anchor_out_speaker, _, negative_out_speaker = model(anchor_data, negative_data, negative_data)
+            scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
+            all_scores.append(float(scores.cpu().numpy()))
+            all_labels.append([0])
+    # Compute ROC curve and ROC area for each class
+    fpr, tpr, threshold = roc_curve(all_labels, all_scores)
+    fnr = 1 - tpr
 
-    test_loss = test_loss/len(test_dataloader.dataset)
-    test_accuracy = 100.0*(test_correct/len(test_dataloader.dataset))
+    # Find the EER
+    eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+    EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]  # Equal Error Rate
 
-    
-    print("================================================")
-    print(" FINAL ACCURACY : {:.4f}% - TEST LOSS : {:.4f}".format(test_accuracy, test_loss))
-    print(" Time for avg test set inference:    ",total_infer_time/len(test_dataloader.dataset))
-    print(" Flops for avg test set inference:    ",total_flops / len(test_dataloader.dataset))
-    # print(" Test Set path count:   ", path_count)
-    print("================================================")
+    print("EER: {:.4f} at threshold {:.4f}".format(EER, eer_threshold))
+
+# Example usage:
+# evaluate_testset(your_model, test_dataloader)
 
 class OrgLoss(nn.Module):
     def __init__(self):

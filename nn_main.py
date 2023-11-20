@@ -9,7 +9,7 @@ import model as md
 import os
 
 
-TRAIN = True
+TRAIN = False
 # ROOT_DIR = "dataset/google_origin/"
 # WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
 # ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
@@ -33,7 +33,7 @@ if __name__ == "__main__":
         util.train(model_fp32, NUM_EPOCH,loaders)
 
     else:
-
+        model_fp32.load("sim_244_kwsacc_92.08_idloss_0.0728")
         util.evaluate_testset(model_fp32, loaders[2])
         
 

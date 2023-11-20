@@ -405,7 +405,7 @@ def get_loaders( root_dir, word_list,speaker_list):
 
     train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=16, shuffle=True)
     dev_trip_loader = data.DataLoader(test_trip_dataset, batch_size=16, shuffle=True)
-    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=16, shuffle=True)
+    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
 
     return [train_trip_loader, test_trip_loader, test_trip_loader]
 
