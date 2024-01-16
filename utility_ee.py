@@ -6,6 +6,9 @@ import torch.utils.data as data
 import speech_dataset as sd
 import model as md
 
+import numpy as np
+from sklearn.metrics import roc_curve
+
 # check if CUDA is available
 train_on_gpu = torch.cuda.is_available()
 time_check = True
@@ -27,8 +30,6 @@ else:
 
 
 
-import numpy as np
-from sklearn.metrics import roc_curve
 def evaluate_testset(model, test_dataloader):
     model.eval()  # Set the model to evaluation mode
     all_scores = []
@@ -40,10 +41,10 @@ def evaluate_testset(model, test_dataloader):
             positive_data, _, _ = positive_batch
             negative_data, _, _ = negative_batch
 
-            if train_on_gpu:
-                anchor_data = anchor_data.cuda()
-                positive_data = positive_data.cuda()
-                negative_data = negative_data.cuda()
+            # if train_on_gpu:
+                # anchor_data = anchor_data.cuda()
+                # positive_data = positive_data.cuda()
+                # negative_data = negative_data.cuda()
 
             _, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
@@ -104,7 +105,7 @@ def train(model, num_epochs, loaders):
     criterion_speaker = nn.TripletMarginLoss(margin=1.0, p=2)  # For speaker identification
     criterion_orth = OrgLoss()  # Custom orthogonal loss
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
     prev_kws_acc = 0
     prev_speaker_loss = 999
 

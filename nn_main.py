@@ -9,7 +9,7 @@ import model as md
 import os
 
 
-TRAIN = False
+TRAIN = True
 # ROOT_DIR = "dataset/google_origin/"
 # WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
 # ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
@@ -17,6 +17,7 @@ TRAIN = False
 
 # # SPEAKER_LIST = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A")]
 ROOT_DIR = "dataset/lege/"
+# ROOT_DIR = "../KWS_TCResNet/dataset/lege/"
 WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
 SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
 NUM_EPOCH = 1000
@@ -33,7 +34,7 @@ if __name__ == "__main__":
         util.train(model_fp32, NUM_EPOCH,loaders)
 
     else:
-        model_fp32.load("sim_244_kwsacc_92.08_idloss_0.0728")
+        model_fp32.load("sim_31_kwsacc_93.50_idloss_0.1871")
         util.evaluate_testset(model_fp32, loaders[2])
         
 

@@ -1,3 +1,6 @@
 saved_model/
 dataset/
 /saved_statistics/
+logs
+input_samples/
+.idea/

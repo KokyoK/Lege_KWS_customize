@@ -13,6 +13,7 @@ import random
 
 import torch
 torch.manual_seed(42)
+random.seed(42)
 import math
 
 
@@ -79,99 +80,163 @@ def get_all_data_length(root_dir):          # for debug
 
 
 
+# def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
+#     """ Generates a list of paths for each sample and splits them into training, validation and test sets.
+
+#         Input(s):
+#             - root_dir (string): Path where to find the dataset. Folder structure should be:
+#                                  -> ROOT_DIR
+#                                      -> yes
+#                                         -> {yes samples}.wav
+#                                      -> no
+#                                         -> {no samples}.wav
+#                                      -> etc.
+#             - word_list (list of strings): List of all words need to train the network on ('unknown' and 'silence')
+#                                            should be added to this list.
+#             - n_samples (int): Number of samples to use for each word. This limit was set to add new words to train.
+#                                Default is 2000.
+#             - split_pct (list of floats): Sets proportions of the dataset which are allocated for training, validation
+#                                           and testing respectively. Default is 80% training, 10% validation & 10% testing.
+#         Output(s):
+
+
+#     """
+
+#     unknown_list = []
+
+#     train_set = []
+#     dev_set = []
+#     test_set = []
+
+
+
+#     available_words = os.listdir(root_dir)      # 列出原数据集的words
+#     for i, word in enumerate(available_words):
+#         if (word in word_list):
+#             for speaker in speaker_list:
+#                 temp_set = []
+#                 for wav_file in os.listdir(root_dir + word):
+#                     if wav_file.endswith(".wav"):
+#                         id = wav_file.split("_",1)[0]
+#                         if (id == speaker):
+#                             temp_set.append((root_dir + word + "/" + wav_file, word,id))
+
+#                 n_samples = len(temp_set)
+#                 n_train = int(n_samples * split_pct[0])
+#                 n_dev = int(n_samples * split_pct[1])
+#             # If word samples are insufficient, re-use same data multiple times.
+#             # This isn't ideal since validation/test sets might contain data from the training set.
+#             # if (len(temp_set) < n_samples):
+#             #     temp_set *= math.ceil(n_samples / len(temp_set))
+#                 temp_set = temp_set[:n_samples]
+#                 random.shuffle(temp_set)
+#                 train_set += temp_set[:n_train]
+#                 dev_set += temp_set[n_train:n_train + n_dev]
+#                 test_set += temp_set[n_train + n_dev:]
+
+#         elif ((word != "_background_noise_") and ("unknown" in word_list)):  # Adding unknown words
+#             if os.path.isdir(root_dir + word):  # 排除缓存文件e.g. .DS_Store
+#                 for wav_file in os.listdir(root_dir + word):
+#                     if wav_file.endswith(".wav"):
+#                         temp_set = [(root_dir + word + "/" + wav_file, "unknown")]
+#                         unknown_list += temp_set
+#                         # print(unknown_list[0])
+
+
+#     # Adding unknown category
+#     if ("unknown" in word_list):
+#         random.shuffle(unknown_list)
+#         # unknown_list = unknown_list[:n_samples]
+#         # n_samples = len(unknown_list)
+#         n_samples = 1500
+#         n_train = int(n_samples * split_pct[0])
+#         n_dev = int(n_samples * split_pct[1])
+
+#         train_set += unknown_list[:n_train]
+#         dev_set += unknown_list[n_train:n_train + n_dev]
+#         test_set += unknown_list[n_train + n_dev:]
+
+#     # Adding silence category
+#     if ("silence" in word_list):
+#         temp_set = [(root_dir + "_background_noise_" + "/" + wav_file, "silence") for wav_file in os.listdir(root_dir \
+#                                                                                                              + "_background_noise_")
+#                     if wav_file.endswith(".wav")]
+#         # if (len(temp_set) < n_samples):
+#         #     temp_set *= math.ceil(n_samples / len(temp_set))
+#         temp_set = temp_set[:n_samples]
+#         train_set += temp_set[:n_train]
+#         dev_set += temp_set[n_train:n_train + n_dev]
+#         test_set += temp_set[n_train + n_dev:]
+
+#     # Shuffling dataset
+#     random.shuffle(train_set)
+#     random.shuffle(dev_set)
+#     random.shuffle(test_set)
+
+#     return train_set, dev_set, test_set
+
+
+# 在train_set中的speaker 不会出现在valid_set和test_set里
 def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
-    """ Generates a list of paths for each sample and splits them into training, validation and test sets.
-
-        Input(s):
-            - root_dir (string): Path where to find the dataset. Folder structure should be:
-                                 -> ROOT_DIR
-                                     -> yes
-                                        -> {yes samples}.wav
-                                     -> no
-                                        -> {no samples}.wav
-                                     -> etc.
-            - word_list (list of strings): List of all words need to train the network on ('unknown' and 'silence')
-                                           should be added to this list.
-            - n_samples (int): Number of samples to use for each word. This limit was set to add new words to train.
-                               Default is 2000.
-            - split_pct (list of floats): Sets proportions of the dataset which are allocated for training, validation
-                                          and testing respectively. Default is 80% training, 10% validation & 10% testing.
-        Output(s):
-
-
-    """
-
+    if sum(split_pct) != 1:
+        raise ValueError("Split percentages must sum to 1")
     unknown_list = []
-
     train_set = []
     dev_set = []
     test_set = []
 
+    # Shuffle and split the speaker list into two groups
+    # random.shuffle(speaker_list)
+    # speaker_list = speaker_list.sort()
+    speaker_list = sorted(speaker_list, reverse=False)
+    n_train_speakers = int(len(speaker_list) * split_pct[0])
+    train_speakers = speaker_list[:n_train_speakers]
+    other_speakers = speaker_list[n_train_speakers:]
+    
 
-
-    available_words = os.listdir(root_dir)      # 列出原数据集的words
-    for i, word in enumerate(available_words):
-        if (word in word_list):
+    # Process each word
+    for word in os.listdir(root_dir):
+        if word in word_list and os.path.isdir(os.path.join(root_dir, word)):
+            # Process each speaker
             for speaker in speaker_list:
-                temp_set = []
-                for wav_file in os.listdir(root_dir + word):
-                    if wav_file.endswith(".wav"):
-                        id = wav_file.split("_",1)[0]
-                        if (id == speaker):
-                            temp_set.append((root_dir + word + "/" + wav_file, word,id))
+                speaker_samples = []
 
-                n_samples = len(temp_set)
-                n_train = int(n_samples * split_pct[0])
-                n_dev = int(n_samples * split_pct[1])
-            # If word samples are insufficient, re-use same data multiple times.
-            # This isn't ideal since validation/test sets might contain data from the training set.
-            # if (len(temp_set) < n_samples):
-            #     temp_set *= math.ceil(n_samples / len(temp_set))
-                temp_set = temp_set[:n_samples]
-                random.shuffle(temp_set)
-                train_set += temp_set[:n_train]
-                dev_set += temp_set[n_train:n_train + n_dev]
-                test_set += temp_set[n_train + n_dev:]
+                for wav_file in os.listdir(os.path.join(root_dir, word)):
+                    if wav_file.endswith(".wav") and wav_file.split("_", 1)[0] == speaker:
+                        speaker_samples.append((os.path.join(root_dir, word, wav_file), word, speaker))
 
-        elif ((word != "_background_noise_") and ("unknown" in word_list)):  # Adding unknown words
-            if os.path.isdir(root_dir + word):  # 排除缓存文件e.g. .DS_Store
-                for wav_file in os.listdir(root_dir + word):
-                    if wav_file.endswith(".wav"):
-                        temp_set = [(root_dir + word + "/" + wav_file, "unknown")]
-                        unknown_list += temp_set
-                        # print(unknown_list[0])
+                # Split speaker_samples into train/dev/test sets
+                if speaker in train_speakers:
+                    train_set += speaker_samples
+                else:
+                    # Split between dev and test sets
+                    n_dev = int(len(speaker_samples) * split_pct[1] / (split_pct[1] + split_pct[2]))
+                    dev_set += speaker_samples[:n_dev]
+                    test_set += speaker_samples[n_dev:]
 
 
-    # Adding unknown category
-    if ("unknown" in word_list):
+    if "unknown" in word_list:
         random.shuffle(unknown_list)
-        # unknown_list = unknown_list[:n_samples]
-        # n_samples = len(unknown_list)
-        n_samples = 1500
+        n_samples = len(unknown_list)
         n_train = int(n_samples * split_pct[0])
         n_dev = int(n_samples * split_pct[1])
-
         train_set += unknown_list[:n_train]
         dev_set += unknown_list[n_train:n_train + n_dev]
         test_set += unknown_list[n_train + n_dev:]
 
-    # Adding silence category
-    if ("silence" in word_list):
-        temp_set = [(root_dir + "_background_noise_" + "/" + wav_file, "silence") for wav_file in os.listdir(root_dir \
-                                                                                                             + "_background_noise_")
-                    if wav_file.endswith(".wav")]
-        # if (len(temp_set) < n_samples):
-        #     temp_set *= math.ceil(n_samples / len(temp_set))
-        temp_set = temp_set[:n_samples]
-        train_set += temp_set[:n_train]
-        dev_set += temp_set[n_train:n_train + n_dev]
-        test_set += temp_set[n_train + n_dev:]
+    if "silence" in word_list:
+        silence_samples = [os.path.join(root_dir, "_background_noise_", wav_file) for wav_file in os.listdir(os.path.join(root_dir, "_background_noise_")) if wav_file.endswith(".wav")]
+        n_samples = len(silence_samples)
+        n_train = int(n_samples * split_pct[0])
+        n_dev = int(n_samples * split_pct[1])
+        train_set += silence_samples[:n_train]
+        dev_set += silence_samples[n_train:n_train + n_dev]
+        test_set += silence_samples[n_train + n_dev:]
 
-    # Shuffling dataset
     random.shuffle(train_set)
     random.shuffle(dev_set)
     random.shuffle(test_set)
-
+    # print(train_set,dev_set)
     return train_set, dev_set, test_set
 
 
