@@ -250,7 +250,9 @@ class TCResNet8(nn.Module):
         # keyword recognition path
         share_map_1 = self.s2_block1(share_map)
         k_map = self.s2_block2(share_map_1)
-        # k_map_unique = F.linear(k_map, self.kws_para)
+        # k_map_share = F.linear(k_map, self.share_para)
+        # k_map = F.linear(k_map, self.kws_para)
+        
         out_k = self.avg_pool(k_map)
         out_k = self.fc(out_k)
         out_k = F.softmax(out_k, dim=1)
@@ -259,7 +261,9 @@ class TCResNet8(nn.Module):
         # speaker recognition path
         out_s = self.s2_block1_speaker(share_map)
         s_map = self.s2_block2_speaker(out_s)
-        # s_map_unique = F.linear(s_map, self.speaker_para)
+        # s_map_share = F.linear(s_map, self.share_para)
+        # s_map = F.linear(s_map, self.speaker_para)
+        
         out_s = self.avg_pool(s_map)
         out_s = self.fc_s(out_s)
         out_s = F.softmax(out_s, dim=1)
