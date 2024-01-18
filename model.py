@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import speech_dataset as sd
 
 
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
@@ -239,6 +240,7 @@ class TCResNet8(nn.Module):
             self.d, self.d), requires_grad=True)
         self.speaker_para = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
+        self.multihead_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
 
     def forward(self, x):
         # First depth-wise and point-wise convolution
@@ -247,13 +249,16 @@ class TCResNet8(nn.Module):
 
         # S2 Blocks processing
         share_map = self.s2_block0(out)
+        
         # keyword recognition path
         share_map_1 = self.s2_block1(share_map)
         k_map = self.s2_block2(share_map_1)
-        # k_map_share = F.linear(k_map, self.share_para)
-        # k_map = F.linear(k_map, self.kws_para)
+        # kws attension
+        k_map_T = k_map.squeeze(2).permute(1, 0, 2)
+        attn_k, attn_k_weights = self.multihead_attn(k_map_T, k_map_T, k_map_T)
+        attn_k = attn_k.permute(1, 0, 2).unsqueeze(2)
         
-        out_k = self.avg_pool(k_map)
+        out_k = self.avg_pool(attn_k)
         out_k = self.fc(out_k)
         out_k = F.softmax(out_k, dim=1)
         out_k = out_k.view(out_k.shape[0], -1)
@@ -261,8 +266,7 @@ class TCResNet8(nn.Module):
         # speaker recognition path
         out_s = self.s2_block1_speaker(share_map)
         s_map = self.s2_block2_speaker(out_s)
-        # s_map_share = F.linear(s_map, self.share_para)
-        # s_map = F.linear(s_map, self.speaker_para)
+        # s_map = s_map - attn_k
         
         out_s = self.avg_pool(s_map)
         out_s = self.fc_s(out_s)
@@ -287,7 +291,20 @@ if __name__ == "__main__":
     x = torch.rand(1, 40, 1, 101)
     ROOT_DIR = "dataset/lege/"
     WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-    # model_fp32 = SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
+    SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
+    loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    
+    model_fp32 = SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
+    for batch_idx, batch in enumerate(loaders[0]):
+        anchor_batch, positive_batch, negative_batch = batch
+        anchor_data, anchor_kws_label, _ = anchor_batch
+        positive_data, _, _ = positive_batch
+        negative_data, _, _ = negative_batch
+        
+        
+        anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model_fp32(anchor_data, positive_data, negative_data)
+        break
+        
 
 
 
