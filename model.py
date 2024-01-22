@@ -240,7 +240,11 @@ class TCResNet8(nn.Module):
             self.d, self.d), requires_grad=True)
         self.speaker_para = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
-        self.multihead_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.kws_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.sid_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.attn_k_weights = None
+        self.attn_s_weights = None
+
 
     def forward(self, x):
         # First depth-wise and point-wise convolution
@@ -253,22 +257,31 @@ class TCResNet8(nn.Module):
         # keyword recognition path
         share_map_1 = self.s2_block1(share_map)
         k_map = self.s2_block2(share_map_1)
-        # kws attension
         k_map_T = k_map.squeeze(2).permute(1, 0, 2)
-        attn_k, attn_k_weights = self.multihead_attn(k_map_T, k_map_T, k_map_T)
+
+        # speaker recognition 
+        out_s = self.s2_block1_speaker(share_map)
+        s_map = self.s2_block2_speaker(out_s)
+        s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
+        
+        # kws attention
+        attn_k, self.attn_k_weights = self.kws_attn(k_map_T, k_map_T, k_map_T)
         attn_k = attn_k.permute(1, 0, 2).unsqueeze(2)
         
+        # speaker attention
+        attn_s, self.attn_s_weights = self.sid_attn(s_map_T, s_map_T, s_map_T)
+        attn_s  = attn_s.permute(1, 0, 2).unsqueeze(2)
+       
+        # s_map = s_map - attn_k
+        
+        # kws after att
         out_k = self.avg_pool(attn_k)
         out_k = self.fc(out_k)
         out_k = F.softmax(out_k, dim=1)
         out_k = out_k.view(out_k.shape[0], -1)
-
-        # speaker recognition path
-        out_s = self.s2_block1_speaker(share_map)
-        s_map = self.s2_block2_speaker(out_s)
-        # s_map = s_map - attn_k
         
-        out_s = self.avg_pool(s_map)
+        # speaker after att
+        out_s = self.avg_pool(attn_s)
         out_s = self.fc_s(out_s)
         out_s = F.softmax(out_s, dim=1)
         out_s = out_s.view(out_s.shape[0], -1)

@@ -79,12 +79,15 @@ class OrgLoss(nn.Module):
         super().__init__()
 
 
-    def forward(self,Share_W, Kws_P,Speaker_P):
+    def forward(self,net):
         # mul = torch.matmul(map_k.squeeze(dim=2), map_s.squeeze(dim=2).permute(0,2,1))
         # o_loss = torch.norm(mul, p='fro') ** 2 / (48*48)
-        o_loss = ((torch.norm(Share_W @ Kws_P.T, p='fro') + torch.norm(Share_W @ Speaker_P.T, p='fro')) ** 2) / (
-                Share_W.data.shape[0] * Kws_P.data.shape[1])
-        return o_loss
+        # o_loss = ((torch.norm(Share_W @ Kws_P.T, p='fro') + torch.norm(Share_W @ Speaker_P.T, p='fro')) ** 2) / (
+        #         Share_W.data.shape[0] * Kws_P.data.shape[1])
+        # o_loss = ((net.attn_k_weights-net.attn_s_weights) ** 2).mean()
+        return  F.cosine_similarity(net.attn_k_weights.view(-1), net.attn_s_weights.view(-1), dim=0)
+
+        # return o_loss * 5
 
 def train(model, num_epochs, loaders):
     """
@@ -134,8 +137,8 @@ def train(model, num_epochs, loaders):
 
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-            loss_orth = criterion_orth(model.network.share_para, model.network.kws_para, model.network.speaker_para)
-            loss = loss_kws + loss_speaker
+            loss_orth = criterion_orth(model.network)
+            loss = loss_kws + loss_speaker + loss_orth
 
             loss.backward()
             optimizer.step()
@@ -181,7 +184,7 @@ def train(model, num_epochs, loaders):
 
                 loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
                 loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-                loss_orth = criterion_orth(model.network.share_para, model.network.kws_para, model.network.speaker_para)
+                loss_orth = criterion_orth(model.network)
                 loss = loss_kws + loss_speaker + loss_orth
 
                 total_valid_loss += loss.item()
