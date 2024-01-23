@@ -240,8 +240,8 @@ class TCResNet8(nn.Module):
             self.d, self.d), requires_grad=True)
         self.speaker_para = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
-        self.kws_attn = nn.MultiheadAttention(embed_dim=48, num_heads=1)
-        self.sid_attn = nn.MultiheadAttention(embed_dim=48, num_heads=1)
+        self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
 
@@ -251,28 +251,34 @@ class TCResNet8(nn.Module):
         out = self.dw_conv_block(x)
         out = self.pw_conv_block(out)
 
-        # S2 Blocks processing
+       # S2 Blocks处理
         share_map = self.s2_block0(out)
+        # print()
         share_map_T = share_map.squeeze(2).permute(1, 0, 2)
         
-        # kws attention
-        attn_k, self.attn_k_weights = self.kws_attn(share_map_T, share_map_T, share_map_T)
-        attn_k = attn_k.permute(1, 0, 2).unsqueeze(2)
+        # 关键词识别注意力
+        attn_k, attn_k_weights = self.kws_attn(share_map_T, share_map_T, share_map_T)
         
-        # speaker attention
-        attn_s, self.attn_s_weights = self.sid_attn(share_map_T, share_map_T, share_map_T)
-        attn_s  = attn_s.permute(1, 0, 2).unsqueeze(2)
+        # 说话人识别注意力
+        attn_s, attn_s_weights = self.sid_attn(share_map_T, share_map_T, share_map_T)
+        attn_k = attn_k.squeeze(-1).permute(1,0,2)  # 移除最后一个维度
+        attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
         
         # 分析注意力差异
-        diff_attn = self.attn_k_weights - self.attn_s_weights
-
+        diff_attn = (attn_k_weights - attn_s_weights)
+        diff_attn_expanded = diff_attn
         # 重定向注意力
-        attn_k_adjusted = attn_k * (1 + diff_attn)
-        attn_s_adjusted = attn_s * (1 - diff_attn)
+        attn_k_adjusted =  diff_attn_expanded @ attn_k 
+        attn_s_adjusted =  (1 - diff_attn_expanded) @ attn_s
+        # print( attn_k_adjusted.shape)
+        # 调整形状以符合后续层
+        attn_k = attn_k_adjusted.permute(0, 1, 2).unsqueeze(2)
+        attn_s = attn_s_adjusted.permute(0, 1, 2).unsqueeze(2)
 
-        # 将注意力调整输出反映到后续层
-        attn_k = attn_k_adjusted.permute(1, 0, 2).unsqueeze(2)
-        attn_s = attn_s_adjusted.permute(1, 0, 2).unsqueeze(2)
+        # print( attn_k.shape)
+
+
+        
         
         
         # keyword recognition path
