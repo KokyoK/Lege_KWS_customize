@@ -240,8 +240,8 @@ class TCResNet8(nn.Module):
             self.d, self.d), requires_grad=True)
         self.speaker_para = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
-        self.kws_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
-        self.sid_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.kws_attn = nn.MultiheadAttention(embed_dim=48, num_heads=1)
+        self.sid_attn = nn.MultiheadAttention(embed_dim=48, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
 
@@ -253,35 +253,51 @@ class TCResNet8(nn.Module):
 
         # S2 Blocks processing
         share_map = self.s2_block0(out)
-        
-        # keyword recognition path
-        share_map_1 = self.s2_block1(share_map)
-        k_map = self.s2_block2(share_map_1)
-        k_map_T = k_map.squeeze(2).permute(1, 0, 2)
-
-        # speaker recognition 
-        out_s = self.s2_block1_speaker(share_map)
-        s_map = self.s2_block2_speaker(out_s)
-        s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
+        share_map_T = share_map.squeeze(2).permute(1, 0, 2)
         
         # kws attention
-        attn_k, self.attn_k_weights = self.kws_attn(k_map_T, k_map_T, k_map_T)
+        attn_k, self.attn_k_weights = self.kws_attn(share_map_T, share_map_T, share_map_T)
         attn_k = attn_k.permute(1, 0, 2).unsqueeze(2)
         
         # speaker attention
-        attn_s, self.attn_s_weights = self.sid_attn(s_map_T, s_map_T, s_map_T)
+        attn_s, self.attn_s_weights = self.sid_attn(share_map_T, share_map_T, share_map_T)
         attn_s  = attn_s.permute(1, 0, 2).unsqueeze(2)
+        
+        # 分析注意力差异
+        diff_attn = self.attn_k_weights - self.attn_s_weights
+
+        # 重定向注意力
+        attn_k_adjusted = attn_k * (1 + diff_attn)
+        attn_s_adjusted = attn_s * (1 - diff_attn)
+
+        # 将注意力调整输出反映到后续层
+        attn_k = attn_k_adjusted.permute(1, 0, 2).unsqueeze(2)
+        attn_s = attn_s_adjusted.permute(1, 0, 2).unsqueeze(2)
+        
+        
+        # keyword recognition path
+        out_k = self.s2_block1(attn_k)
+        k_map = self.s2_block2(out_k)
+        # k_map_T = k_map.squeeze(2).permute(1, 0, 2)
+
+        # speaker recognition 
+        out_s = self.s2_block1_speaker(attn_s)
+        s_map = self.s2_block2_speaker(out_s)
+        # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
+        
+
+
        
         # s_map = s_map - attn_k
         
         # kws after att
-        out_k = self.avg_pool(attn_k)
+        out_k = self.avg_pool(k_map)
         out_k = self.fc(out_k)
         out_k = F.softmax(out_k, dim=1)
         out_k = out_k.view(out_k.shape[0], -1)
         
         # speaker after att
-        out_s = self.avg_pool(attn_s)
+        out_s = self.avg_pool(s_map)
         out_s = self.fc_s(out_s)
         out_s = F.softmax(out_s, dim=1)
         out_s = out_s.view(out_s.shape[0], -1)
