@@ -43,7 +43,7 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == "dataset/google_origin/":
+    elif ROOT_DIR == "../KWS_TCResNet/dataset/google_origin/":
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if (word in WORD_LIST):
