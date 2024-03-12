@@ -336,13 +336,14 @@ class AudioPreprocessor():
 
     def __call__(self, data):
         # print(data[0].shape)
-        o_data = self.spectrogram(data[0])
+        o_data = self.spectrogram(data)
+        # print(o_data.shape)
         # o_data = self.mfcc(data[0])
         # print(o_data[0].shape)
         # Set Filters as channels
         o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
         # print(o_data.shape,data[1])
-        return o_data, data[1],data[2]
+        return o_data
 
 
 import itertools
@@ -393,29 +394,35 @@ class TripletSpeechDataset(data.Dataset):
         self.sample_length = sample_length
         self.transforms = transforms
         self.word_list = word_list
-        self.speaker_list = speaker_list
+        self.speaker_list = speaker_list   
+        for j in range(len(self.triplet_list)):
+            # triplet = triplet_list[j]
+            anchor, positive, negative = self.triplet_list[j]
+            triplet =  [anchor,positive,negative]
+            for i in range(len(triplet)):
+                cur_element = self.load_data(triplet[i])
+                triplet[i] = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
+            self.triplet_list[j] = triplet    
     def __len__(self):
         return len(self.triplet_list)
 
     def __getitem__(self, idx):
-        anchor, positive, negative = self.triplet_list[idx]
-        triplet =  [anchor,positive,negative]
-        # Load and transform each part of the triplet
-        for i in range(len(triplet)):
-            cur_element = self.load_data(triplet[i])
-            triplet[i] = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
-            # positive_data = self.load_data(positive)
-            # negative_data = self.load_data(negative)
-
-        if self.transforms:
-            anchor_data = self.transforms(triplet[0])
-            positive_data = self.transforms(triplet[1])
-            negative_data = self.transforms(triplet[2])
-
+        # anchor, positive, negative = self.triplet_list[idx]
+        # triplet =  [anchor,positive,negative]
+        # # Load and transform each part of the triplet
+        # for i in range(len(triplet)):
+        #     cur_element = self.load_data(triplet[i])
+        #     triplet[i] = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
+        # # if self.transforms:
+        # #     anchor_data = self.transforms(triplet[0])
+        # #     positive_data = self.transforms(triplet[1])
+        # #     negative_data = self.transforms(triplet[2])
+        triplet = self.triplet_list[idx]
+        return triplet
 
 
 
-        return anchor_data, positive_data, negative_data
+        # return anchor_data, positive_data, negative_data
 
     def load_data(self, data_element):
         """ Loads audio, shifts data and adds noise. """
@@ -450,6 +457,9 @@ class TripletSpeechDataset(data.Dataset):
         # Add random noise
         if self.is_noisy:
             out_data += 0.01 * torch.randn(out_data.shape)
+            
+        # to spectrum
+        out_data = self.transforms(out_data)
 
         return (out_data, data_element[1], data_element[2])
 
