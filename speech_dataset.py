@@ -1,7 +1,7 @@
 import os
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-from numpy.lib.function_base import i0
+# from numpy.lib.function_base import i0
 import torch.utils.data as data
 import torch.nn.functional as F
 import torchaudio.functional as F_audio
@@ -10,7 +10,7 @@ import torch.nn as nn
 import numpy as np
 import torchaudio
 import random
-
+import csv
 import torch
 torch.manual_seed(42)
 random.seed(42)
@@ -43,7 +43,7 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == "../KWS_TCResNet/dataset/google_origin/":
+    elif ROOT_DIR == "dataset/google_origin/":
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if (word in WORD_LIST):
@@ -453,68 +453,136 @@ class TripletSpeechDataset(data.Dataset):
 
         return (out_data, data_element[1], data_element[2])
 
-
 def get_loaders( root_dir, word_list,speaker_list):
+    train, dev, test = split_dataset(root_dir, word_list, speaker_list)
+    ap = AudioPreprocessor()
+    # train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
+    # dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
+    # test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
+    train_trip = read_csv("dataset/split/train.csv")
+    valid_trip = read_csv("dataset/split/valid.csv")
+    test_trip = read_csv("dataset/split/test.csv")
+    # train_trip = generate_triplets(train_data)
+    train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
+    # dev_trip = generate_triplets(dev_data)
+    valid_trip_dataset = TripletSpeechDataset(valid_trip, "train", ap, word_list, speaker_list)
+    # test_trip = generate_triplets(test_data)
+    test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
+    
+
+    train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=32, shuffle=True)
+    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=32, shuffle=True)
+    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
+
+    return [train_trip_loader, valid_trip_loader, test_trip_loader]
+
+class CsvLogger:
+    def __init__(self, filename, head):
+        self.filename = filename
+        # 初始化时创建文件并写入标题
+        with open(self.filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(head)  # 举例的标题行
+
+    def log(self, data):
+        with open(self.filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(data)
+
+
+def create_csv(root_dir, word_list,speaker_list):
+    train_csv = CsvLogger(filename='dataset/split/train.csv', head=["path","kw","id"])
+    valid_csv = CsvLogger(filename='dataset/split/valid.csv', head=["path","kw","id"])
+    test_csv = CsvLogger(filename='dataset/split/test.csv', head=["path","kw","id"])
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
     train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
     dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
     test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
 
-    train_trip = generate_triplets(train_data)
-    train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
-    dev_trip = generate_triplets(dev_data)
-    dev_trip_dataset = TripletSpeechDataset(dev_trip, "train", ap, word_list, speaker_list)
-    test_trip = generate_triplets(test_data)
-    test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
+    train_trips = generate_triplets(train_data)
+    # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
+    valid_trips = generate_triplets(dev_data)
+    # dev_trip_dataset = TripletSpeechDataset(dev_trip, "train", ap, word_list, speaker_list)
+    test_trips = generate_triplets(test_data)
+    # test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
+    for train_trip in train_trips:
+        for sample in train_trip:
+            train_csv.log(sample)
+    
+    for valid_trip in valid_trips:
+        for sample in valid_trip:
+            valid_csv.log(sample)
+    
+    for test_trip in test_trips:
+        for sample in test_trip:
+            test_csv.log(sample)
+    
+    
+def read_csv(file_path):
+    with open(file_path, 'r') as f:
+        reader = csv.reader(f)
+        next(reader)  # Skip the header line
+        chunk_list = []
+        # A temporary list to store up to three rows
+        temp_chunk = []
+        for row in reader:
+            temp_chunk.append(tuple(row))
+            if len(temp_chunk) == 3:
+                chunk_list.append(tuple(temp_chunk))
+                temp_chunk = []  # Reset the temporary list after adding to chunk_list
+        if temp_chunk:  # Add any remaining rows that didn't make a full chunk of three
+            chunk_list.append(tuple(temp_chunk))
 
-    train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=16, shuffle=True)
-    dev_trip_loader = data.DataLoader(test_trip_dataset, batch_size=16, shuffle=True)
-    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
-
-    return [train_trip_loader, test_trip_loader, test_trip_loader]
-
+    return chunk_list
+    
 if __name__ == "__main__":
     # Test example
-    root_dir = "dataset/lege/"
-    word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
+    # root_dir = "dataset/lege/"
+    # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
+    # speaker_list = fetch_speaker_list(root_dir,word_list)
+    # @todo: data preparation
+    root_dir =  "dataset/google_origin/"
+    word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
     speaker_list = fetch_speaker_list(root_dir,word_list)
-    # root_dir = "dataset/google_origin/"
-    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "silence"]
+  
     # root_dir = "dataset/huawei_modify/WAV_new/"
     # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
     # speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
-    loaders = get_loaders(root_dir, word_list, speaker_list)
-    
-    ap = AudioPreprocessor()
-    train, dev, test = split_dataset(root_dir, word_list, speaker_list)
 
-    # Dataset
-    train_data = SpeechDataset(train, "train", ap, word_list,speaker_list)
-    dev_data = SpeechDataset(dev, "train", ap, word_list,speaker_list)
-    test_data = SpeechDataset(test, "train", ap, word_list,speaker_list)
-    # Dataloaders
-    train_dataloader = data.DataLoader(train_data, batch_size=1, shuffle=False)
+    
+    # create_csv(root_dir, word_list,speaker_list)
+    
+    # ap = AudioPreprocessor()
+    # train, dev, test = split_dataset(root_dir, word_list, speaker_list)
+
+    # # Dataset
+    # train_data = SpeechDataset(train, "train", ap, word_list,speaker_list)
+    # dev_data = SpeechDataset(dev, "train", ap, word_list,speaker_list)
+    # test_data = SpeechDataset(test, "train", ap, word_list,speaker_list)
+    # # Dataloaders
+    # train_dataloader = data.DataLoader(train_data, batch_size=1, shuffle=False)
     # dev_dataloader = data.DataLoader(dev_data, batch_size=1, shuffle=False)
     # test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=False)
 
-    train_trip = generate_triplets(train_data)
-    train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list,speaker_list)
+    # train_trip = generate_triplets(train_data)
+    # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list,speaker_list)
 
-    # 假设您已经有了一个包含三元组的列表 `triplets`
+    # # 假设您已经有了一个包含三元组的列表 `triplets`
 
-    train_trip_loader = data.DataLoader(train_trip_dataset,batch_size= 16, shuffle=True)
+    # train_trip_loader = data.DataLoader(train_trip_dataset,batch_size= 16, shuffle=True)
+    loaders = get_loaders(root_dir, word_list, speaker_list)
+    # train_trip_loader = [0]
+    # # 在训练循环中使用 DataLoader
+    # for i,batch in enumerate(train_trip_loader):
+    #     (anchor, positive, negative) = batch
+    #     # 计算三元损失，进行训练等
+    #     break
 
-    # 在训练循环中使用 DataLoader
-    for i,batch in enumerate(train_trip_loader):
-        (anchor, positive, negative) = batch
-        # 计算三元损失，进行训练等
-        break
 
-
-    # print(len()
-    for i, data in enumerate(train_dataloader):
-        print(data)
+    # # print(len()
+    # for i, data in enumerate(train_dataloader):
+    #     print(data)
         # print(train_labels,id)
         # print(data)
         # if train_spectrogram.shape !=
@@ -529,7 +597,3 @@ if __name__ == "__main__":
         # train_spectrogram, train_labels = next(iter(train_dataloader))
         # print(train_spectrogram.shape,train_labels.shape)
         # break
-
-
-
-

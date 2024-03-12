@@ -213,9 +213,9 @@ class TCResNet8(nn.Module):
         super(TCResNet8, self).__init__()
 
         # First Convolution layer (Depth-wise and Point-wise)
-        self.dw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=n_mels, kernel_size=(1, 3),
-                                       padding=(0, 1), groups=n_mels, bias=False)
-        self.pw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=1, bias=False)
+        self.dw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=(1, 3),
+                                       padding=(0, 1), bias=True)
+        # self.pw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=1, bias=False)
 
         # S2 Blocks
         self.s2_block0 = S2_Block(int(16 * k), int(24 * k))
@@ -229,19 +229,35 @@ class TCResNet8(nn.Module):
 
         # Average Pooling and Fully Connected Layer
         self.avg_pool = nn.AvgPool2d(kernel_size=(1, 13), stride=1)
-        self.fc = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0, bias=False)
-        self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=False)
+        self.fc = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0, bias=True)
+        self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=True)
 
         # Parameters for orthogonal loss
         self.d = 13  # feature数
-        self.share_para = nn.Parameter(torch.randn(
+        # self.share_para = nn.Parameter(torch.randn(
+        #     self.d, self.d), requires_grad=True)
+        # self.kws_para = nn.Parameter(torch.randn(
+        #     self.d, self.d), requires_grad=True)
+        # self.speaker_para = nn.Parameter(torch.randn(
+        #     self.d, self.d), requires_grad=True)
+        self.w_kk = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
-        self.kws_para = nn.Parameter(torch.randn(
+        self.w_ks = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
-        self.speaker_para = nn.Parameter(torch.randn(
+        self.w_ss = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
-        self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
-        self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        self.w_sk = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        self.w_s_dis = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        self.w_k_dis = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        # self.conv_ks = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
+        #                                padding=(1, 1), bias=True)
+        # self.conv_sk = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
+        #                                padding=(1, 1), bias=True)
+        # self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        # self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
 
@@ -249,52 +265,35 @@ class TCResNet8(nn.Module):
     def forward(self, x):
         # First depth-wise and point-wise convolution
         out = self.dw_conv_block(x)
-        out = self.pw_conv_block(out)
+        # out = self.pw_conv_block(out)
 
        # S2 Blocks处理
         share_map = self.s2_block0(out)
-        # print()
-        share_map_T = share_map.squeeze(2).permute(1, 0, 2)
-        
-        # 关键词识别注意力
-        attn_k, attn_k_weights = self.kws_attn(share_map_T, share_map_T, share_map_T)
-        
-        # 说话人识别注意力
-        attn_s, attn_s_weights = self.sid_attn(share_map_T, share_map_T, share_map_T)
-        attn_k = attn_k.squeeze(-1).permute(1,0,2)  # 移除最后一个维度
-        attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
-        
-        # 分析注意力差异
-        diff_attn = (attn_k_weights - attn_s_weights)
-        diff_attn_expanded = diff_attn
-        # 重定向注意力
-        attn_k_adjusted =  diff_attn_expanded @ attn_k 
-        attn_s_adjusted =  (1 - diff_attn_expanded) @ attn_s
-        # print( attn_k_adjusted.shape)
-        # 调整形状以符合后续层
-        attn_k = attn_k_adjusted.permute(0, 1, 2).unsqueeze(2)
-        attn_s = attn_s_adjusted.permute(0, 1, 2).unsqueeze(2)
-
         # print( attn_k.shape)
 
 
-        
-        
-        
         # keyword recognition path
-        out_k = self.s2_block1(attn_k)
+        out_k = self.s2_block1(share_map)
         k_map = self.s2_block2(out_k)
         # k_map_T = k_map.squeeze(2).permute(1, 0, 2)
 
         # speaker recognition 
-        out_s = self.s2_block1_speaker(attn_s)
+        out_s = self.s2_block1_speaker(share_map)
         s_map = self.s2_block2_speaker(out_s)
         # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
         
 
-
-       
-        # s_map = s_map - attn_k
+        # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
+        # k_map, s_map = out_k, out_s 
+        kk = k_map @ self.w_kk
+        ks = k_map @ self.w_ks
+        ss = s_map @ self.w_ss
+        sk = s_map @ self.w_sk
+        # sk = self.conv_sk(sk)
+        # ks = self.conv_ks(ks)
+        k_map = kk + sk
+        s_map = ss + ks
+        # todo: done
         
         # kws after att
         out_k = self.avg_pool(k_map)
@@ -307,7 +306,7 @@ class TCResNet8(nn.Module):
         out_s = self.fc_s(out_s)
         out_s = F.softmax(out_s, dim=1)
         out_s = out_s.view(out_s.shape[0], -1)
-
+    
         return out_k, out_s, k_map, s_map
 
     def save(self, is_onnx=0, name="TCResNet8"):

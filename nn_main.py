@@ -10,7 +10,7 @@ import os
 
 
 TRAIN = True
-ROOT_DIR = "../KWS_TCResNet/dataset/google_origin/"
+ROOT_DIR = "dataset/google_origin/"
 WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
 # ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
 # WORD_LIST = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
@@ -30,10 +30,12 @@ if __name__ == "__main__":
     loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
 
     if TRAIN :
+        # model_fp32.load("google_orth_sim_267_kwsacc_91.64_idloss_0.0717")
         util.train(model_fp32, NUM_EPOCH,loaders)
 
     else:
-        model_fp32.load("sim_31_kwsacc_93.50_idloss_0.1871")
+        # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
+        model_fp32.load("saved_model/google_orth_sim_267_kwsacc_91.64_idloss_0.0717")
         util.evaluate_testset(model_fp32, loaders[2])
         
 

@@ -4,3 +4,6 @@ dataset/
 logs
 input_samples/
 .idea/__pycache__/
+/__pycache__/
+/.vscode/
+/.idea/
