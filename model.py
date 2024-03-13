@@ -233,7 +233,7 @@ class TCResNet8(nn.Module):
         self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=True)
 
         # Parameters for orthogonal loss
-        self.d = 13  # feature数
+        self.d = 48  # feature数
         # self.share_para = nn.Parameter(torch.randn(
         #     self.d, self.d), requires_grad=True)
         # self.kws_para = nn.Parameter(torch.randn(
@@ -282,13 +282,20 @@ class TCResNet8(nn.Module):
         s_map = self.s2_block2_speaker(out_s)
         # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
         
+        k_map = self.avg_pool(k_map).squeeze()
+        s_map = self.avg_pool(s_map).squeeze()
 
         # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
         # k_map, s_map = out_k, out_s 
-        kk = k_map @ self.w_kk
-        ks = k_map @ self.w_ks
-        ss = s_map @ self.w_ss
-        sk = s_map @ self.w_sk
+        kk = F.linear(k_map, self.w_kk)
+        ks = F.linear(k_map, self.w_ks )
+        sk = F.linear(s_map, self.w_sk)
+        ss = F.linear(s_map, self.w_ss)
+        
+        # kk = self.w_kk @ k_map
+        # ks = self.w_ks @ k_map 
+        # ss = self.w_ss @ s_map
+        # sk = self.w_sk @ s_map
         # sk = self.conv_sk(sk)
         # ks = self.conv_ks(ks)
         k_map = kk + sk
@@ -296,14 +303,14 @@ class TCResNet8(nn.Module):
         # todo: done
         
         # kws after att
-        out_k = self.avg_pool(k_map)
-        out_k = self.fc(out_k)
+        # out_k = self.avg_pool(k_map)
+        out_k = self.fc(k_map.unsqueeze(2).unsqueeze(3))
         out_k = F.softmax(out_k, dim=1)
         out_k = out_k.view(out_k.shape[0], -1)
         
         # speaker after att
-        out_s = self.avg_pool(s_map)
-        out_s = self.fc_s(out_s)
+        # out_s = self.avg_pool(s_map)
+        out_s = self.fc_s(s_map.unsqueeze(2).unsqueeze(3))
         out_s = F.softmax(out_s, dim=1)
         out_s = out_s.view(out_s.shape[0], -1)
     

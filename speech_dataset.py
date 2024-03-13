@@ -469,9 +469,10 @@ def get_loaders( root_dir, word_list,speaker_list):
     # train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
     # dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
     # test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
-    train_trip = read_csv("dataset/split/train.csv")
-    valid_trip = read_csv("dataset/split/valid.csv")
-    test_trip = read_csv("dataset/split/test.csv")
+    split_root = "dataset/split/"
+    train_trip = read_csv(split_root+"train.csv")
+    valid_trip = read_csv(split_root+"valid.csv")
+    test_trip = read_csv(split_root+"test.csv")
     # train_trip = generate_triplets(train_data)
     train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
     # dev_trip = generate_triplets(dev_data)

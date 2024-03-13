@@ -30,12 +30,12 @@ if __name__ == "__main__":
     loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
 
     if TRAIN :
-        # model_fp32.load("google_orth_sim_267_kwsacc_91.64_idloss_0.0717")
+        # model_fp32.load("google/tune_12_kwsacc_90.46_idloss_0.0421")
         util.train(model_fp32, NUM_EPOCH,loaders)
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        model_fp32.load("saved_model/google_orth_sim_267_kwsacc_91.64_idloss_0.0717")
+        model_fp32.load("google/sim_att_12_kwsacc_90.46_idloss_0.0421")
         util.evaluate_testset(model_fp32, loaders[2])
         
 
