@@ -74,26 +74,8 @@ def evaluate_testset(model, test_dataloader):
 # Example usage:
 # evaluate_testset(your_model, test_dataloader)
 
-class OrgLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
 
 
-    def forward(self,net):
-        # mul = torch.matmul(map_k.squeeze(dim=2), map_s.squeeze(dim=2).permute(0,2,1))
-        # o_loss = torch.norm(mul, p='fro') ** 2 / (48*48)
-        # o_loss = ((torch.norm(Share_W @ Kws_P.T, p='fro') + torch.norm(Share_W @ Speaker_P.T, p='fro')) ** 2) / (
-        #         Share_W.data.shape[0] * Kws_P.data.shape[1])
-        # o_loss = ((net.attn_k_weights-net.attn_s_weights) ** 2).mean()
-        # return  F.cosine_similarity(net.attn_k_weights.view(-1), net.attn_s_weights.view(-1), dim=0)
-        # loss = torch.Tensor([0])
-        # if train_on_gpu:
-        #     loss.to(device)
-        loss_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.w_ss, net.w_sk), dtype=torch.float32).view(1, 1)))
-        loss_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.w_ss, net.w_sk), dtype=torch.float32).view(1, 1)))
-        return loss_k + loss_s
-
-        # return o_loss * 5
 
 def train(model, num_epochs, loaders):
     """
@@ -112,7 +94,6 @@ def train(model, num_epochs, loaders):
 
     criterion_kws = nn.CrossEntropyLoss()  # For keyword spotting
     criterion_speaker = nn.TripletMarginLoss(margin=1.0, p=2)  # For speaker identification
-    criterion_orth = OrgLoss()  # Custom orthogonal loss
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-6, weight_decay=0)
     prev_kws_acc = 0
@@ -143,8 +124,8 @@ def train(model, num_epochs, loaders):
 
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-            loss_orth = criterion_orth(model.network)
-            loss = loss_kws + loss_speaker + loss_orth
+
+            loss = loss_kws + loss_speaker
 
             loss.backward()
             optimizer.step()
@@ -152,12 +133,11 @@ def train(model, num_epochs, loaders):
             total_train_loss += loss.item()
             total_train_loss_kws += loss_kws.item()
             total_train_loss_speaker += loss_speaker.item()
-            total_train_loss_orth += loss_orth.item()
             total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
             total_samples += anchor_kws_label.size(0)
 
             if batch_idx % 100 == 0:
-                print(f'Epoch {epoch+1}| Step {batch_idx+1}| Loss KWS: {loss_kws.item():.4f}| Loss Speaker: {loss_speaker.item():.4f}| Loss Orth: {loss_orth.item():.4f}| Total Loss: {loss.item():.4f}| KWS Acc: {100 * torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item() / anchor_kws_label.size(0):.2f}%')
+                print(f'Epoch {epoch+1}| Step {batch_idx+1}| Loss KWS: {loss_kws.item():.4f}| Loss Speaker: {loss_speaker.item():.4f}| Total Loss: {loss.item():.4f}| KWS Acc: {100 * torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item() / anchor_kws_label.size(0):.2f}%')
 
         avg_train_loss = total_train_loss / len(train_dataloader)
         train_accuracy = total_correct_kws / total_samples * 100
@@ -190,13 +170,11 @@ def train(model, num_epochs, loaders):
 
                 loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
                 loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-                loss_orth = criterion_orth(model.network)
-                loss = loss_kws + 2*loss_speaker + loss_orth
+                loss = loss_kws + 2*loss_speaker 
 
                 total_valid_loss += loss.item()
                 total_valid_loss_kws += loss_kws.item()
                 total_valid_loss_speaker += loss_speaker.item()
-                total_valid_loss_orth += loss_orth.item()
                 total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
                 total_samples += anchor_kws_label.size(0)
 
