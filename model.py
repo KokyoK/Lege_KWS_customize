@@ -288,7 +288,7 @@ class TCResNet8(nn.Module):
         # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
         # k_map, s_map = out_k, out_s 
         kk = F.linear(k_map, self.w_kk)
-        ks = F.linear(k_map, self.w_ks )
+        ks = F.linear(k_map, self.w_ks)
         sk = F.linear(s_map, self.w_sk)
         ss = F.linear(s_map, self.w_ss)
         
