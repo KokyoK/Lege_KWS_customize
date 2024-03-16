@@ -165,46 +165,40 @@ class S2_Block(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(S2_Block, self).__init__()
 
-        # Depth-wise convolution for the first layer
-        self.dw_conv0 = nn.Conv2d(in_channels=in_ch, out_channels=in_ch, kernel_size=(1, 9), stride=2,
-                                  padding=(0, 4), groups=in_ch, bias=False)
-        self.pw_conv0 = nn.Conv2d(in_channels=in_ch, out_channels=out_ch, kernel_size=1, bias=False)
+        # Convolution for the first layer
+        self.conv0 = nn.Conv2d(in_channels=in_ch, out_channels=out_ch, kernel_size=(1, 9), stride=2,
+                                  padding=(0, 4), bias=True)
         self.bn0 = nn.BatchNorm2d(out_ch, affine=True)
 
-        # Depth-wise convolution for the second layer
-        self.dw_conv1 = nn.Conv2d(in_channels=out_ch, out_channels=out_ch, kernel_size=(1, 9), stride=1,
-                                  padding=(0, 4), groups=out_ch, bias=False)
-        self.pw_conv1 = nn.Conv2d(in_channels=out_ch, out_channels=out_ch, kernel_size=1, bias=False)
+        # Convolution for the second layer
+        self.conv1 = nn.Conv2d(in_channels=out_ch, out_channels=out_ch, kernel_size=(1, 9), stride=1,
+                                  padding=(0, 4),  bias=True)
         self.bn1 = nn.BatchNorm2d(out_ch, affine=True)
 
         # Residual depth-wise convolution
-        self.dw_conv_res = nn.Conv2d(in_channels=in_ch, out_channels=in_ch, kernel_size=(1, 9), stride=2,
-                                     padding=(0, 4), groups=in_ch, bias=False)
-        self.pw_conv_res = nn.Conv2d(in_channels=in_ch, out_channels=out_ch, kernel_size=1, bias=False)
+        self.conv_res = nn.Conv2d(in_channels=in_ch, out_channels=out_ch, kernel_size=(1, 9), stride=2,
+                                     padding=(0, 4), bias=True)
         self.bn_res = nn.BatchNorm2d(out_ch, affine=True)
 
     def forward(self, x):
-        # First depth-wise and point-wise convolution
-        out = self.dw_conv0(x)
-        out = self.pw_conv0(out)
+        # First convolution
+        out = self.conv0(x)
         out = self.bn0(out)
         out = F.relu(out)
-
-        # Second depth-wise and point-wise convolution
-        out = self.dw_conv1(out)
-        out = self.pw_conv1(out)
+        # Second convolution
+        out = self.conv1(out)
         out = self.bn1(out)
-
+        out = F.relu(out)
         # Residual connection
-        identity = self.dw_conv_res(x)
-        identity = self.pw_conv_res(identity)
+        identity = self.conv_res(x)
         identity = self.bn_res(identity)
         identity = F.relu(identity)
 
-        out += identity
+        out = out + identity
         out = F.relu(out)
 
         return out
+
 
 class TCResNet8(nn.Module):
     """ TC-ResNet8 using Depth-wise and Point-wise Convolution """
