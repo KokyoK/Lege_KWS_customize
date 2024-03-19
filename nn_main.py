@@ -30,7 +30,7 @@ if __name__ == "__main__":
     loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
 
     if TRAIN :
-        # model_fp32.load(" google/sim_att_5_kwsacc_91.43_idloss_0.0448")
+        model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
         util.train(model_fp32, NUM_EPOCH,loaders)
 
     else:

@@ -114,7 +114,7 @@ def train(model, num_epochs, loaders):
     criterion_speaker = nn.TripletMarginLoss(margin=1.0, p=2)  # For speaker identification
     criterion_orth = OrgLoss()  # Custom orthogonal loss
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=0)
     prev_kws_acc = 0
     prev_speaker_loss = 999
 

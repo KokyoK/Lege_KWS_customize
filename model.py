@@ -263,17 +263,18 @@ class TCResNet8(nn.Module):
 
        # S2 Blocks处理
         share_map = self.s2_block0(out)
+        share_map = self.s2_block1(share_map)
         # print( attn_k.shape)
 
 
         # keyword recognition path
-        out_k = self.s2_block1(share_map)
-        k_map = self.s2_block2(out_k)
+        # out_k = self.s2_block1(share_map)
+        k_map = self.s2_block2(share_map)
         # k_map_T = k_map.squeeze(2).permute(1, 0, 2)
 
         # speaker recognition 
-        out_s = self.s2_block1_speaker(share_map)
-        s_map = self.s2_block2_speaker(out_s)
+        # out_s = self.s2_block1_speaker(share_map)
+        s_map = self.s2_block2_speaker(share_map)
         # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
         
         k_map = self.avg_pool(k_map).squeeze()
