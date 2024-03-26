@@ -293,8 +293,8 @@ class TCResNet8(nn.Module):
         # sk = self.w_sk @ s_map
         # sk = self.conv_sk(sk)
         # ks = self.conv_ks(ks)
-        k_map = kk + sk
-        s_map = ss + ks
+        k_map = kk
+        s_map = ss
         # todo: done
         
         # kws after att
