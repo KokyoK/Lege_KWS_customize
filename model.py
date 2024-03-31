@@ -143,7 +143,7 @@ class SiameseTCResNet(nn.Module):
         self.network = TCResNet8(k, n_mels, n_classes, n_speaker)
 
     def forward(self, anchor,pos,neg):
-        # 分别处理两个输入
+        # 分别处理3个输入
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
         out_k2, out_s2, map_k2, map_s2 = self.network(pos)
         out_k3, out_s3, map_k3, map_s3 = self.network(neg)

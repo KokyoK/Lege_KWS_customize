@@ -16,6 +16,9 @@ torch.manual_seed(42)
 random.seed(42)
 import math
 
+train_noise_count = 8
+valid_noise_count = 8
+test_noise_count = 8
 
 # if torch.cuda.is_available():
 #     torch.cuda.set_device(geforce_rtx_3060_xc)
@@ -44,7 +47,8 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == "dataset/google_origin/":
+    elif ROOT_DIR == "dataset/google_origin/" or ROOT_DIR == "dataset/google_noisy/NGSCD/":
+        ROOT_DIR = "dataset/google_origin/" 
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if (word in WORD_LIST):
@@ -54,22 +58,108 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                         if (id not in speaker_list):
                             speaker_list.append(id)
     return speaker_list
+import pandas as pd
+import os
+import random
+
+import pandas as pd
+import os
+import random
+
+def merge_noisy_datasets(csv_lists_path):
+    # Predefined SNR lists
+    snrs_tr = ['0', '5', '10', '15', '20','-']  # Training and validation SNRs
+    snrs_te = ['-10', '-5', '0', '5', '10', '15', '20', '-']  # Test SNRs
+
+    # Function to merge and add columns to CSV files
+    def merge_and_add_columns(file_type, snrs):
+        frames = []
+        for i in range(1, 9):
+            file_path = os.path.join(csv_lists_path, f'{file_type}_clean{i}.csv')
+            df = pd.read_csv(file_path)
+            # Assign random noise type and noise level to each row
+            df['noise'] = df.apply(lambda x: i, axis=1)
+            df['noise_level'] = df.apply(lambda x: random.choice(snrs), axis=1)
+            frames.append(df)
+        merged_df = pd.concat(frames)
+        return merged_df
+
+    # Merge and add columns to the CSV files
+    train_df = merge_and_add_columns('train', snrs_tr)
+    valid_df = merge_and_add_columns('valid', snrs_tr)
+    test_df = merge_and_add_columns('test', snrs_te)
+
+    # Save the new datasets
+    train_df.to_csv(os.path.join('dataset/google_noisy/split', 'train.csv'), index=False)
+    valid_df.to_csv(os.path.join('dataset/google_noisy/split', 'valid.csv'), index=False)
+    test_df.to_csv(os.path.join('dataset/google_noisy/split', 'test.csv'), index=False)
+
+    return train_df, valid_df, test_df
 
 
-def print_spectrogram(spectrogram, labels, word_list):
-    """ Prints spectrogram to screen. Used for debugging.
-        Input(s): Tensor of dimensions [n_batch x 1 x n_mel x 101]
-        Output(s): None
-    """
-    np_spectrogram = (spectrogram.view(spectrogram.shape[0], spectrogram.shape[2], spectrogram.shape[1], 101)).numpy()
-    fig, axs = plt.subplots(8, int(spectrogram.shape[0] / 8))
-    for i in range(8):
-        for j in range(int(spectrogram.shape[0] / 8)):
-            axs[i, j].imshow(np_spectrogram[8 * i + j, 0])
-            axs[i, j].set_title(word_list[labels[8 * i + j]])
-            axs[i, j].axis('off')
-    plt.show()
 
+
+
+class CsvLogger:
+    def __init__(self, filename, head):
+        self.filename = filename
+        # 初始化时创建文件并写入标题
+        with open(self.filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(head)  # 举例的标题行
+
+    def log(self, data):
+        with open(self.filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(data)
+def read_csv(file_path):
+    with open(file_path, 'r') as f:
+        reader = csv.reader(f)
+        next(reader)  # Skip the header line
+        chunk_list = []
+        # A temporary list to store up to three rows
+        temp_chunk = []
+        for row in reader:
+            temp_chunk.append(tuple(row))
+            if len(temp_chunk) == 3:
+                chunk_list.append(tuple(temp_chunk))
+                temp_chunk = []  # Reset the temporary list after adding to chunk_list
+        if temp_chunk:  # Add any remaining rows that didn't make a full chunk of three
+            chunk_list.append(tuple(temp_chunk))
+
+    return chunk_list
+
+def create_csv(root_dir, word_list,speaker_list):
+    train_csv = CsvLogger(filename='dataset/split/train.csv', head=["path","kw","id"])
+    valid_csv = CsvLogger(filename='dataset/split/valid.csv', head=["path","kw","id"])
+    test_csv = CsvLogger(filename='dataset/split/test.csv', head=["path","kw","id"])
+    
+    
+    
+    train, dev, test = split_dataset(root_dir, word_list, speaker_list)
+    ap = AudioPreprocessor()
+    train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
+    dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
+    test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
+
+    train_trips = generate_triplets(train_data)
+    # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
+    valid_trips = generate_triplets(dev_data)
+    # dev_trip_dataset = TripletSpeechDataset(dev_trip, "train", ap, word_list, speaker_list)
+    test_trips = generate_triplets(test_data)
+    # test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
+    for train_trip in train_trips:
+        for sample in train_trip:
+            train_csv.log(sample)
+    
+    for valid_trip in valid_trips:
+        for sample in valid_trip:
+            valid_csv.log(sample)
+    
+    for test_trip in test_trips:
+        for sample in test_trip:
+            test_csv.log(sample)   
+            
 def get_all_data_length(root_dir):          # for debug
     sample_count = 0
     for available_words in os.listdir(root_dir):  #
@@ -78,103 +168,6 @@ def get_all_data_length(root_dir):          # for debug
     print(sample_count)
     return sample_count
 
-
-
-
-# def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
-#     """ Generates a list of paths for each sample and splits them into training, validation and test sets.
-
-#         Input(s):
-#             - root_dir (string): Path where to find the dataset. Folder structure should be:
-#                                  -> ROOT_DIR
-#                                      -> yes
-#                                         -> {yes samples}.wav
-#                                      -> no
-#                                         -> {no samples}.wav
-#                                      -> etc.
-#             - word_list (list of strings): List of all words need to train the network on ('unknown' and 'silence')
-#                                            should be added to this list.
-#             - n_samples (int): Number of samples to use for each word. This limit was set to add new words to train.
-#                                Default is 2000.
-#             - split_pct (list of floats): Sets proportions of the dataset which are allocated for training, validation
-#                                           and testing respectively. Default is 80% training, 10% validation & 10% testing.
-#         Output(s):
-
-
-#     """
-
-#     unknown_list = []
-
-#     train_set = []
-#     dev_set = []
-#     test_set = []
-
-
-
-#     available_words = os.listdir(root_dir)      # 列出原数据集的words
-#     for i, word in enumerate(available_words):
-#         if (word in word_list):
-#             for speaker in speaker_list:
-#                 temp_set = []
-#                 for wav_file in os.listdir(root_dir + word):
-#                     if wav_file.endswith(".wav"):
-#                         id = wav_file.split("_",1)[0]
-#                         if (id == speaker):
-#                             temp_set.append((root_dir + word + "/" + wav_file, word,id))
-
-#                 n_samples = len(temp_set)
-#                 n_train = int(n_samples * split_pct[0])
-#                 n_dev = int(n_samples * split_pct[1])
-#             # If word samples are insufficient, re-use same data multiple times.
-#             # This isn't ideal since validation/test sets might contain data from the training set.
-#             # if (len(temp_set) < n_samples):
-#             #     temp_set *= math.ceil(n_samples / len(temp_set))
-#                 temp_set = temp_set[:n_samples]
-#                 random.shuffle(temp_set)
-#                 train_set += temp_set[:n_train]
-#                 dev_set += temp_set[n_train:n_train + n_dev]
-#                 test_set += temp_set[n_train + n_dev:]
-
-#         elif ((word != "_background_noise_") and ("unknown" in word_list)):  # Adding unknown words
-#             if os.path.isdir(root_dir + word):  # 排除缓存文件e.g. .DS_Store
-#                 for wav_file in os.listdir(root_dir + word):
-#                     if wav_file.endswith(".wav"):
-#                         temp_set = [(root_dir + word + "/" + wav_file, "unknown")]
-#                         unknown_list += temp_set
-#                         # print(unknown_list[0])
-
-
-#     # Adding unknown category
-#     if ("unknown" in word_list):
-#         random.shuffle(unknown_list)
-#         # unknown_list = unknown_list[:n_samples]
-#         # n_samples = len(unknown_list)
-#         n_samples = 1500
-#         n_train = int(n_samples * split_pct[0])
-#         n_dev = int(n_samples * split_pct[1])
-
-#         train_set += unknown_list[:n_train]
-#         dev_set += unknown_list[n_train:n_train + n_dev]
-#         test_set += unknown_list[n_train + n_dev:]
-
-#     # Adding silence category
-#     if ("silence" in word_list):
-#         temp_set = [(root_dir + "_background_noise_" + "/" + wav_file, "silence") for wav_file in os.listdir(root_dir \
-#                                                                                                              + "_background_noise_")
-#                     if wav_file.endswith(".wav")]
-#         # if (len(temp_set) < n_samples):
-#         #     temp_set *= math.ceil(n_samples / len(temp_set))
-#         temp_set = temp_set[:n_samples]
-#         train_set += temp_set[:n_train]
-#         dev_set += temp_set[n_train:n_train + n_dev]
-#         test_set += temp_set[n_train + n_dev:]
-
-#     # Shuffling dataset
-#     random.shuffle(train_set)
-#     random.shuffle(dev_set)
-#     random.shuffle(test_set)
-
-#     return train_set, dev_set, test_set
 
 
 # 在train_set中的speaker 不会出现在valid_set和test_set里
@@ -385,13 +378,11 @@ def generate_triplets(dataset, num_anchors_per_sample=5):
     return triplets
 # Example of how to use the function
 class TripletSpeechDataset(data.Dataset):
-    def __init__(self, triplet_list, dataset_type, transforms, word_list, speaker_list, is_noisy=False, is_shift=False,
+    def __init__(self, triplet_list, dataset_type, transforms, word_list, speaker_list,
                  sample_length=16000):
         self.triplet_list = triplet_list
         self.transforms = transforms
         self.dataset_type = dataset_type
-        self.is_noisy = is_noisy
-        self.is_shift = is_shift
         self.sample_length = sample_length
         self.transforms = transforms
         self.word_list = word_list
@@ -408,16 +399,7 @@ class TripletSpeechDataset(data.Dataset):
         return len(self.triplet_list)
 
     def __getitem__(self, idx):
-        # anchor, positive, negative = self.triplet_list[idx]
-        # triplet =  [anchor,positive,negative]
-        # # Load and transform each part of the triplet
-        # for i in range(len(triplet)):
-        #     cur_element = self.load_data(triplet[i])
-        #     triplet[i] = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
-        # # if self.transforms:
-        # #     anchor_data = self.transforms(triplet[0])
-        # #     positive_data = self.transforms(triplet[1])
-        # #     negative_data = self.transforms(triplet[2])
+
         triplet = self.triplet_list[idx]
         return triplet
 
@@ -427,9 +409,25 @@ class TripletSpeechDataset(data.Dataset):
 
     def load_data(self, data_element):
         """ Loads audio, shifts data and adds noise. """
-        # print(data_element)
-        wav_data = torchaudio.load(data_element[0])[0]
-        wav_data = F_audio.resample(wav_data, 16000, 8000)  # @NOTE: 下采样到8000，部署的时候改原采样率
+        # print(data_element) # ('up/888a0c49_nohash_3.wav', 'up', '888a0c49', '1', '20')
+        # TODO: Find Datapath
+        datapath_root = "dataset/google_noisy/NGSCD/"
+        # data_path = self.dataset_type+"/"+ 
+        if data_element[4]=='-':
+            data_path = f"clean{data_element[3]}"
+        else:
+            data_path = f"N{data_element[3]}_SNR{data_element[4]}"
+        data_path = datapath_root + self.dataset_type+"/"+ data_path + "/" +data_element[0].replace("/","_")
+
+        # filename = data_element[0].split("/")[1]
+        # if data_element[4] == "-":
+        #     folder_name = clean
+        # path = datapath_root + self.dataset_type + "/N" + data_element[3] 
+        
+        
+        
+        wav_data = torchaudio.load(data_path)[0]
+        wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
 
         # Background noise used for silence needs to be shortened to 1 second.
         if (data_element[1] == "silence"):
@@ -450,14 +448,6 @@ class TripletSpeechDataset(data.Dataset):
             t = out_data.shape[1] - data_len
             out_data = out_data[:, t:data_len + t]
 
-        # print(out_data.shape)
-        # Adds audio shift (upto 100 ms)
-        if self.is_shift:
-            out_data = self.shift_audio(out_data)
-
-        # Add random noise
-        if self.is_noisy:
-            out_data += 0.01 * torch.randn(out_data.shape)
             
         # to spectrum
         out_data = self.transforms(out_data)
@@ -467,20 +457,25 @@ class TripletSpeechDataset(data.Dataset):
 def get_loaders( root_dir, word_list,speaker_list):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
-    # train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
-    # dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
-    # test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
-    split_root = "dataset/split/"
+
+    split_root = "dataset/google_noisy/split/"
+    
+    train_trips = []
+    valid_trips = []
+    test_trips = []
+    # for i in range(train_noise_count):
+    #     train_trips.append(read_csv(split_root+"train.csv"))    
+        
     train_trip = read_csv(split_root+"train.csv")
     valid_trip = read_csv(split_root+"valid.csv")
     test_trip = read_csv(split_root+"test.csv")
-    # train_trip = generate_triplets(train_data)
-    train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
+
+
+    train_trip_dataset = TripletSpeechDataset(train_trip, "Train", ap, word_list, speaker_list)
     # dev_trip = generate_triplets(dev_data)
-    valid_trip_dataset = TripletSpeechDataset(valid_trip, "train", ap, word_list, speaker_list)
+    valid_trip_dataset = TripletSpeechDataset(valid_trip, "Valid", ap, word_list, speaker_list)
     # test_trip = generate_triplets(test_data)
-    test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
-    
+    test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
 
     train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=32, shuffle=True)
     valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=32, shuffle=True)
@@ -488,124 +483,28 @@ def get_loaders( root_dir, word_list,speaker_list):
 
     return [train_trip_loader, valid_trip_loader, test_trip_loader]
 
-class CsvLogger:
-    def __init__(self, filename, head):
-        self.filename = filename
-        # 初始化时创建文件并写入标题
-        with open(self.filename, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(head)  # 举例的标题行
-
-    def log(self, data):
-        with open(self.filename, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(data)
-
-
-def create_csv(root_dir, word_list,speaker_list):
-    train_csv = CsvLogger(filename='dataset/split/train.csv', head=["path","kw","id"])
-    valid_csv = CsvLogger(filename='dataset/split/valid.csv', head=["path","kw","id"])
-    test_csv = CsvLogger(filename='dataset/split/test.csv', head=["path","kw","id"])
-    train, dev, test = split_dataset(root_dir, word_list, speaker_list)
-    ap = AudioPreprocessor()
-    train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
-    dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
-    test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
-
-    train_trips = generate_triplets(train_data)
-    # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
-    valid_trips = generate_triplets(dev_data)
-    # dev_trip_dataset = TripletSpeechDataset(dev_trip, "train", ap, word_list, speaker_list)
-    test_trips = generate_triplets(test_data)
-    # test_trip_dataset = TripletSpeechDataset(test_trip, "train", ap, word_list, speaker_list)
-    for train_trip in train_trips:
-        for sample in train_trip:
-            train_csv.log(sample)
-    
-    for valid_trip in valid_trips:
-        for sample in valid_trip:
-            valid_csv.log(sample)
-    
-    for test_trip in test_trips:
-        for sample in test_trip:
-            test_csv.log(sample)
-    
-    
-def read_csv(file_path):
-    with open(file_path, 'r') as f:
-        reader = csv.reader(f)
-        next(reader)  # Skip the header line
-        chunk_list = []
-        # A temporary list to store up to three rows
-        temp_chunk = []
-        for row in reader:
-            temp_chunk.append(tuple(row))
-            if len(temp_chunk) == 3:
-                chunk_list.append(tuple(temp_chunk))
-                temp_chunk = []  # Reset the temporary list after adding to chunk_list
-        if temp_chunk:  # Add any remaining rows that didn't make a full chunk of three
-            chunk_list.append(tuple(temp_chunk))
-
-    return chunk_list
-    
+   
 if __name__ == "__main__":
     # Test example
     # root_dir = "dataset/lege/"
     # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     # speaker_list = fetch_speaker_list(root_dir,word_list)
     # @todo: data preparation
-    root_dir =  "dataset/google_origin/"
+    root_dir =  "dataset/google_noisy/NGSCD/"
     word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
     speaker_list = fetch_speaker_list(root_dir,word_list)
-  
-    # root_dir = "dataset/huawei_modify/WAV_new/"
-    # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
-    # speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
-
-    
-    # create_csv(root_dir, word_list,speaker_list)
-    
-    # ap = AudioPreprocessor()
-    # train, dev, test = split_dataset(root_dir, word_list, speaker_list)
-
-    # # Dataset
-    # train_data = SpeechDataset(train, "train", ap, word_list,speaker_list)
-    # dev_data = SpeechDataset(dev, "train", ap, word_list,speaker_list)
-    # test_data = SpeechDataset(test, "train", ap, word_list,speaker_list)
-    # # Dataloaders
-    # train_dataloader = data.DataLoader(train_data, batch_size=1, shuffle=False)
-    # dev_dataloader = data.DataLoader(dev_data, batch_size=1, shuffle=False)
-    # test_dataloader = data.DataLoader(test_data, batch_size=1, shuffle=False)
-
-    # train_trip = generate_triplets(train_data)
-    # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list,speaker_list)
-
-    # # 假设您已经有了一个包含三元组的列表 `triplets`
-
-    # train_trip_loader = data.DataLoader(train_trip_dataset,batch_size= 16, shuffle=True)
+    print("num speakers: ", len(speaker_list))
     loaders = get_loaders(root_dir, word_list, speaker_list)
-    # train_trip_loader = [0]
-    # # 在训练循环中使用 DataLoader
-    # for i,batch in enumerate(train_trip_loader):
-    #     (anchor, positive, negative) = batch
-    #     # 计算三元损失，进行训练等
-    #     break
+    
+    
+    
+    
+    
+    # # NOTE 生成数据集 list
+    # csv_lists_path = 'dataset/NoisyGSCD/csvLists/'
+    # train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
 
-
-    # # print(len()
-    # for i, data in enumerate(train_dataloader):
-    #     print(data)
-        # print(train_labels,id)
-        # print(data)
-        # if train_spectrogram.shape !=
-        # train_spectrogram, train_labels = next(iter(train_dataloader))
-        # train_spectrogram, train_labels = np.array(train_spectrogram), np.array(train_labels)
-        # np.save('feature.npy', train_spectrogram)
-        # np.save('label.npy', train_labels)
-        # print(train_spectrogram.shape,train_labels.shape)
-        # print(train_labels)
-        # break
-        # print(train_spectrogram.shape)
-        # train_spectrogram, train_labels = next(iter(train_dataloader))
-        # print(train_spectrogram.shape,train_labels.shape)
-        # break
+    # print(train_df.head())
+    # print(valid_df.head())
+    # print(test_df.head())
+   

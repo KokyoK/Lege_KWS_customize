@@ -211,7 +211,7 @@ def train(model, num_epochs, loaders):
         print(f"################################################################")
         speaker_loss = total_valid_loss_speaker / len(dev_dataloader)
         if (speaker_loss < prev_speaker_loss ):
-            model.save(name=f"google/sim_att_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}")
+            model.save(name=f"google_noisy/sim_att_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}")
             prev_kws_acc = valid_accuracy
             prev_speaker_loss = speaker_loss
     print("Training complete.")
