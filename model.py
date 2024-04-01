@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import speech_dataset as sd
-
-
+import noisy_dataset as nsd 
+torch.manual_seed(42)
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -281,31 +281,40 @@ class TCResNet8(nn.Module):
         s_map = self.avg_pool(s_map).squeeze()
 
         # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
+        # baseline 
+        k_map = k_map.unsqueeze(2).unsqueeze(3)
+        s_map = s_map.unsqueeze(2).unsqueeze(3)
+        ###
         # k_map, s_map = out_k, out_s 
-        kk = F.linear(k_map, self.w_kk)
-        ks = F.linear(k_map, self.w_ks)
-        sk = F.linear(s_map, self.w_sk)
-        ss = F.linear(s_map, self.w_ss)
+        # kk = F.linear(k_map, self.w_kk)
+        # ks = F.linear(k_map, self.w_ks)
+        # sk = F.linear(s_map, self.w_sk)
+        # ss = F.linear(s_map, self.w_ss)
+        # k_map = kk.unsqueeze(2).unsqueeze(3)
+        # s_map = ss.unsqueeze(2).unsqueeze(3)
         
-        # kk = self.w_kk @ k_map
-        # ks = self.w_ks @ k_map 
-        # ss = self.w_ss @ s_map
-        # sk = self.w_sk @ s_map
+        # kk = self.w_kk @ k_map.T
+        # ks = self.w_ks @ k_map.T
+        # ss = self.w_ss @ s_map.T
+        # sk = self.w_sk @ s_map.T
         # sk = self.conv_sk(sk)
         # ks = self.conv_ks(ks)
-        k_map = kk
-        s_map = ss
-        # todo: done
+
+
+        # k_map = kk.T.unsqueeze(2).unsqueeze(3)
+        # s_map = ss.T.unsqueeze(2).unsqueeze(3)
+
         
+        # print(k_map.shape)
         # kws after att
         # out_k = self.avg_pool(k_map)
-        out_k = self.fc(k_map.unsqueeze(2).unsqueeze(3))
+        out_k = self.fc(k_map)
         out_k = F.softmax(out_k, dim=1)
         out_k = out_k.view(out_k.shape[0], -1)
         
         # speaker after att
         # out_s = self.avg_pool(s_map)
-        out_s = self.fc_s(s_map.unsqueeze(2).unsqueeze(3))
+        out_s = self.fc_s(s_map)
         out_s = F.softmax(out_s, dim=1)
         out_s = out_s.view(out_s.shape[0], -1)
     
@@ -324,22 +333,28 @@ class TCResNet8(nn.Module):
 
 
 if __name__ == "__main__":
-    x = torch.rand(1, 40, 1, 101)
-    ROOT_DIR = "dataset/lege/"
-    WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-    SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
-    loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    
+    ROOT_DIR = "dataset/google_noisy/NGSCD/"
+    WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    SPEAKER_LIST = nsd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
+    print("num speaker: ", len(SPEAKER_LIST))
+    x = torch.rand(32, 40, 1, 101)
     model_fp32 = SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
-    for batch_idx, batch in enumerate(loaders[0]):
-        anchor_batch, positive_batch, negative_batch = batch
-        anchor_data, anchor_kws_label, _ = anchor_batch
-        positive_data, _, _ = positive_batch
-        negative_data, _, _ = negative_batch
+    out = model_fp32(x,x,x)
+    # ROOT_DIR = "dataset/lege/"
+    # WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
+    # SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
+    # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    
+    # model_fp32 = SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
+    # for batch_idx, batch in enumerate(loaders[0]):
+    #     anchor_batch, positive_batch, negative_batch = batch
+    #     anchor_data, anchor_kws_label, _ = anchor_batch
+    #     positive_data, _, _ = positive_batch
+    #     negative_data, _, _ = negative_batch
         
         
-        anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model_fp32(anchor_data, positive_data, negative_data)
-        break
+    #     anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model_fp32(anchor_data, positive_data, negative_data)
+    #     break
         
 
 

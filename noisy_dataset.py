@@ -410,7 +410,6 @@ class TripletSpeechDataset(data.Dataset):
     def load_data(self, data_element):
         """ Loads audio, shifts data and adds noise. """
         # print(data_element) # ('up/888a0c49_nohash_3.wav', 'up', '888a0c49', '1', '20')
-        # TODO: Find Datapath
         datapath_root = "dataset/google_noisy/NGSCD/"
         # data_path = self.dataset_type+"/"+ 
         if data_element[4]=='-':
