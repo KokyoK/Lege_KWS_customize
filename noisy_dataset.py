@@ -47,7 +47,7 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == "dataset/google_origin/" or ROOT_DIR == "dataset/google_noisy/NGSCD/":
+    elif ROOT_DIR == "dataset/google_origin/" or ROOT_DIR == "dataset/google_noisy/NGSCD/" or ROOT_DIR == "dataset/google_noisy/NGSCD_SPEC/" :
         ROOT_DIR = "dataset/google_origin/" 
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
@@ -392,8 +392,8 @@ class TripletSpeechDataset(data.Dataset):
             anchor, positive, negative = self.triplet_list[j]
             triplet =  [anchor,positive,negative]
             for i in range(len(triplet)):
-                cur_element = self.load_data(triplet[i])
-                triplet[i] = (cur_element[0], self.word_list.index(cur_element[1]), self.speaker_list.index(cur_element[2]))
+                spec, clean_spec, cur_element = self.load_data(triplet[i])
+                triplet[i] = (spec,clean_spec, [self.word_list.index(cur_element[0]), self.speaker_list.index(cur_element[1]),cur_element[2],cur_element[3]])
             self.triplet_list[j] = triplet    
     def __len__(self):
         return len(self.triplet_list)
@@ -410,7 +410,7 @@ class TripletSpeechDataset(data.Dataset):
     def load_data(self, data_element):
         """ Loads audio, shifts data and adds noise. """
         # print(data_element) # ('up/888a0c49_nohash_3.wav', 'up', '888a0c49', '1', '20')
-        datapath_root = "dataset/google_noisy/NGSCD/"
+        datapath_root = "dataset/google_noisy/NGSCD_SPEC/"
         # data_path = self.dataset_type+"/"+ 
         if data_element[4]=='-':
             data_path = f"clean{data_element[3]}"
@@ -418,23 +418,25 @@ class TripletSpeechDataset(data.Dataset):
             data_path = f"N{data_element[3]}_SNR{data_element[4]}"
         data_path = datapath_root + self.dataset_type+"/"+ data_path + "/" +data_element[0].replace("/","_")
 
-        # filename = data_element[0].split("/")[1]
-        # if data_element[4] == "-":
-        #     folder_name = clean
-        # path = datapath_root + self.dataset_type + "/N" + data_element[3] 
+        cleanpath_root = "dataset/google_origin_SPEC/"
+        clean_path =  cleanpath_root+data_element[0]
         
+        # 读取 wav
+        # out_data = self.process_audio(data_path=data_path)
+        # clean_data = self.process_audio(data_path=clean_path)
         
+        # 读取 spec
         
+        out_data = torch.load(data_path.replace(".wav",".pt"))
+        clean_data = torch.load(clean_path.replace(".wav",".pt"))
+        # print(data_element) # ('up/888a0c49_nohash_3.wav', 'up', '888a0c49', '1', '-')
+        return (out_data,clean_data, data_element[1:])
+    
+    def process_audio(self, data_path):
         wav_data = torchaudio.load(data_path)[0]
         wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
 
-        # Background noise used for silence needs to be shortened to 1 second.
-        if (data_element[1] == "silence"):
-            slice_idx = random.randint(0, wav_data.view(-1).shape[0] - self.sample_length - 1)
-            amplitude = random.random()
-            out_data = amplitude * wav_data[:, slice_idx:slice_idx + self.sample_length]
-        else:
-            out_data = 1 * wav_data
+        out_data = 1 * wav_data
         # print(out_data.shape)
 
         data_len = 16000
@@ -447,12 +449,10 @@ class TripletSpeechDataset(data.Dataset):
             t = out_data.shape[1] - data_len
             out_data = out_data[:, t:data_len + t]
 
-            
         # to spectrum
         out_data = self.transforms(out_data)
-
-        return (out_data, data_element[1], data_element[2])
-
+        return out_data
+        
 def get_loaders( root_dir, word_list,speaker_list):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()

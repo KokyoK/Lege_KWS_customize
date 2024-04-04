@@ -12,7 +12,7 @@ import os
 
 TRAIN = True
 # ROOT_DIR = "dataset/google_origin/"
-ROOT_DIR = "dataset/google_noisy/NGSCD/"
+ROOT_DIR = "dataset/google_noisy/NGSCD_SPEC/"
 WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
 # ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
 # WORD_LIST = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
@@ -31,6 +31,7 @@ if __name__ == "__main__":
 
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    print("Get loaders done.")
 
     if TRAIN :
         # model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
@@ -38,7 +39,7 @@ if __name__ == "__main__":
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        model_fp32.load("google/sim_att_52_kwsacc_90.12_idloss_0.0482")
+        model_fp32.load("google_noisy/sim_att_32_kwsacc_84.74_idloss_0.1533")
         util.evaluate_testset(model_fp32, loaders[2])
         
 
