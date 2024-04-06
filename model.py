@@ -26,9 +26,9 @@ class SiameseTCResNet(nn.Module):
         self.denoise_net = unet.UNet()
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
-        anchor = self.denoise_net(anchor)
-        pos = self.denoise_net(pos)
-        neg = self.denoise_net(neg)
+        # anchor = self.denoise_net(anchor)
+        # pos = self.denoise_net(pos)
+        # neg = self.denoise_net(neg)
         self.denoised_anchor = anchor
         # 分别处理3个输入
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
@@ -141,7 +141,7 @@ class TCResNet8(nn.Module):
         # self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
-
+        self.test = nn.Linear(48,48)
 
     def forward(self, x):
         # First depth-wise and point-wise convolution
@@ -170,8 +170,7 @@ class TCResNet8(nn.Module):
         # baseline 
         # k_map = k_map.unsqueeze(2).unsqueeze(3)
         # s_map = s_map.unsqueeze(2).unsqueeze(3)
-        ###
-        # k_map, s_map = out_k, out_s 
+        # ###
         kk = F.linear(k_map, self.w_kk)
         ks = F.linear(k_map, self.w_ks)
         sk = F.linear(s_map, self.w_sk)

@@ -1,5 +1,5 @@
 import torch
-torch.manual_seed(42)
+torch.manual_seed(41)
 import torch.utils.data as data
 import speech_dataset as sd
 import noisy_dataset as nd
@@ -10,9 +10,9 @@ import model as md
 import os
 
 
-TRAIN = True
-# ROOT_DIR = "dataset/google_origin/"
-ROOT_DIR = "dataset/google_noisy/NGSCD_SPEC/"
+TRAIN = False
+ROOT_DIR = "dataset/google_origin/"
+# ROOT_DIR = "dataset/google_noisy/NGSCD_SPEC/"
 WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
 # ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
 # WORD_LIST = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
 
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     print("Get loaders done.")
 
     if TRAIN :
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        model_fp32.load("google_noisy/sim_att_32_kwsacc_84.74_idloss_0.1533")
+        model_fp32.load("google_noisy/no_denoiseorth_45_kwsacc_85.49_idloss_0.5300_eer_0.4405")
         util.evaluate_testset(model_fp32, loaders[2])
         
 

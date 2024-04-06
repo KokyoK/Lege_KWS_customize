@@ -55,10 +55,11 @@ def evaluate_testset(model, test_dataloader):
     model.eval()  # Set the model to evaluation mode
     all_scores = []
     all_labels = []
-
+    total_correct_kws = 0
+    total_samples = 0
     with torch.no_grad():
         for batch_idx, (anchor_batch, positive_batch, negative_batch) in enumerate(test_dataloader):
-            anchor_data, _, _, = anchor_batch
+            anchor_data, anchor_clean, [anchor_kws_label,_,_,_] = anchor_batch
             positive_data, _, _ = positive_batch
             negative_data, _, _ = negative_batch
 
@@ -67,7 +68,7 @@ def evaluate_testset(model, test_dataloader):
                 # positive_data = positive_data.cuda()
                 # negative_data = negative_data.cuda()
 
-            _, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
+            anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
             # 计算说话人之间的相似度分数
             # scores = F.cosine_similarity(anchor_out_speaker, positive_out_speaker)
@@ -82,15 +83,29 @@ def evaluate_testset(model, test_dataloader):
             scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
             all_scores.append(float(scores.cpu().numpy()))
             all_labels.append([0])
-    # Compute ROC curve and ROC area for each class
+            total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
+            total_samples += anchor_kws_label.size(0)
+            
+    test_accuracy = total_correct_kws / total_samples * 100
+    print(f'Test Accuracy KWS: {test_accuracy:.2f}%' )
+    # 计算 ROC 曲线
     fpr, tpr, threshold = roc_curve(all_labels, all_scores)
     fnr = 1 - tpr
-
-    # Find the EER
+    # 找到在 FAR 为 1% 时的 FRR 和阈值
+    frr_at_1_idx = np.argmax(fpr >= 0.01)
+    frr_at_1 = fnr[frr_at_1_idx]
+    threshold_at_1 = threshold[frr_at_1_idx]
+    # 找到在 FAR 为 10% 时的 FRR 和阈值
+    frr_at_10_idx = np.argmax(fpr >= 0.1)
+    frr_at_10 = fnr[frr_at_10_idx]
+    threshold_at_10 = threshold[frr_at_10_idx]
+    # eer
     eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
     EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]  # Equal Error Rate
 
-    print("EER: {:.4f} at threshold {:.4f}".format(EER, eer_threshold))
+    print(f"FRR at  1%: {frr_at_1*100:.4f}% FAR, Threshold at  1% FAR: {threshold_at_1:.4f}",)
+    print(f"FRR at 10%: {frr_at_10*100:.4f}% FAR, Threshold at 10% FAR: {threshold_at_10:.4f}",)
+    print("EER: {:.4f} % at threshold {:.4f}".format(EER*100, eer_threshold))
 
 # Example usage:
 # evaluate_testset(your_model, test_dataloader)
@@ -183,6 +198,7 @@ def train(model, num_epochs, loaders):
     ])
     prev_kws_acc = 0
     prev_speaker_loss = 999
+    prev_EER = 100
 
     for epoch in range(num_epochs):
         model.train()
@@ -217,7 +233,7 @@ def train(model, num_epochs, loaders):
             # loss = loss_denoise + loss_kws + loss_speaker + loss_orth
             loss = loss_kws + loss_speaker + loss_orth
             
-            loss_denoise.backward(retain_graph=True)
+            # loss_denoise.backward(retain_graph=True)
             loss.backward()
             optimizer.step()
 
@@ -245,7 +261,9 @@ def train(model, num_epochs, loaders):
         total_valid_loss_orth = 0
         total_correct_kws = 0
         total_samples = 0
-
+        
+        all_scores = []
+        all_labels = []
         with torch.no_grad():
             for batch in dev_dataloader:
                 anchor_batch, positive_batch, negative_batch = batch
@@ -262,6 +280,16 @@ def train(model, num_epochs, loaders):
                 anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data,
                                                                                                        positive_data,
                                                                                                        negative_data)
+                # calulate eer  # 标签为 1 表示同一个说话人，0 表示不同说话人
+                scores = -torch.norm(anchor_out_speaker - positive_out_speaker, p=2)
+                all_scores.append(float(scores.cpu().numpy()))
+                all_labels.append([1])
+                
+                scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
+                all_scores.append(float(scores.cpu().numpy()))
+                all_labels.append([0])
+                
+                
                 # calculate loss
                 loss_denoise = criterion_noise(anchor_clean, model.denoised_anchor)
                 loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
@@ -276,6 +304,11 @@ def train(model, num_epochs, loaders):
                 total_valid_loss_orth += loss_orth.item()
                 total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
                 total_samples += anchor_kws_label.size(0)
+        # Compute ROC curve and ROC area for each class
+        fpr, tpr, threshold = roc_curve(all_labels, all_scores)
+        fnr = 1 - tpr
+        eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+        EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]  # Equal Error Rate
 
         avg_valid_loss = total_valid_loss / len(dev_dataloader)
         valid_accuracy = total_correct_kws / total_samples * 100
@@ -284,13 +317,15 @@ def train(model, num_epochs, loaders):
         print(f' Valid Accuracy KWS: {valid_accuracy:.2f}%  ｜ Valid Loss: {avg_valid_loss:.4f}')
         print(f'Train Loss Denoise: {total_train_loss_denoise / len(train_dataloader):.4f} | Train Loss KWS: {total_train_loss_kws / len(train_dataloader):.4f}｜ Train Loss Speaker: {total_train_loss_speaker / len(train_dataloader):.4f}｜ Train Loss Orth: {total_train_loss_orth / len(train_dataloader):.4f}')
         print(f'Valid Loss Denoise: {total_valid_loss_denoise / len(dev_dataloader):.4f} | Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}｜ Valid Loss Speaker: {total_valid_loss_speaker / len(dev_dataloader):.4f}｜ Valid Loss Orth: {total_valid_loss_orth / len(dev_dataloader):.4f}')
+        print("EER: {:.4f} at threshold {:.4f}".format(EER*100, eer_threshold))
         # print(f'Total Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}')
         print(f"################################################################")
         speaker_loss = total_valid_loss_speaker / len(dev_dataloader)
-        if (speaker_loss < prev_speaker_loss ):
-            model.save(name=f"google_noisy/no_denoise_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}")
+        if (prev_kws_acc < valid_accuracy ):
+            model.save(name=f"google_noisy/no_denoise_no_orth_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}_eer_{EER*100:.4f}")
             prev_kws_acc = valid_accuracy
             prev_speaker_loss = speaker_loss
+            prev_EER = EER
     print("Training complete.")
 
 # Example usage:
