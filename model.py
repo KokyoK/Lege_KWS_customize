@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import speech_dataset as sd
-
+torch.manual_seed(43)
 
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
@@ -277,9 +277,10 @@ class TCResNet8(nn.Module):
         s_map = self.s2_block2_speaker(share_map)
         # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
         
-        k_map = self.avg_pool(k_map).squeeze()
-        s_map = self.avg_pool(s_map).squeeze()
+        k_map = self.avg_pool(k_map).squeeze(2,3)
+        s_map = self.avg_pool(s_map).squeeze(2,3)
 
+        
         # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
         # k_map, s_map = out_k, out_s 
         kk = F.linear(k_map, self.w_kk)
@@ -293,6 +294,7 @@ class TCResNet8(nn.Module):
         # sk = self.w_sk @ s_map
         # sk = self.conv_sk(sk)
         # ks = self.conv_ks(ks)
+        
         k_map = kk + sk
         s_map = ss + ks
         # todo: done

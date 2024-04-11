@@ -43,7 +43,8 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == "dataset/google_origin/":
+    elif ROOT_DIR == "dataset/google_origin/" or "dataset/google_origin_SPEC/":
+        ROOT_DIR = "dataset/google_origin/"
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if (word in WORD_LIST):
@@ -78,102 +79,6 @@ def get_all_data_length(root_dir):          # for debug
     return sample_count
 
 
-
-
-# def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
-#     """ Generates a list of paths for each sample and splits them into training, validation and test sets.
-
-#         Input(s):
-#             - root_dir (string): Path where to find the dataset. Folder structure should be:
-#                                  -> ROOT_DIR
-#                                      -> yes
-#                                         -> {yes samples}.wav
-#                                      -> no
-#                                         -> {no samples}.wav
-#                                      -> etc.
-#             - word_list (list of strings): List of all words need to train the network on ('unknown' and 'silence')
-#                                            should be added to this list.
-#             - n_samples (int): Number of samples to use for each word. This limit was set to add new words to train.
-#                                Default is 2000.
-#             - split_pct (list of floats): Sets proportions of the dataset which are allocated for training, validation
-#                                           and testing respectively. Default is 80% training, 10% validation & 10% testing.
-#         Output(s):
-
-
-#     """
-
-#     unknown_list = []
-
-#     train_set = []
-#     dev_set = []
-#     test_set = []
-
-
-
-#     available_words = os.listdir(root_dir)      # 列出原数据集的words
-#     for i, word in enumerate(available_words):
-#         if (word in word_list):
-#             for speaker in speaker_list:
-#                 temp_set = []
-#                 for wav_file in os.listdir(root_dir + word):
-#                     if wav_file.endswith(".wav"):
-#                         id = wav_file.split("_",1)[0]
-#                         if (id == speaker):
-#                             temp_set.append((root_dir + word + "/" + wav_file, word,id))
-
-#                 n_samples = len(temp_set)
-#                 n_train = int(n_samples * split_pct[0])
-#                 n_dev = int(n_samples * split_pct[1])
-#             # If word samples are insufficient, re-use same data multiple times.
-#             # This isn't ideal since validation/test sets might contain data from the training set.
-#             # if (len(temp_set) < n_samples):
-#             #     temp_set *= math.ceil(n_samples / len(temp_set))
-#                 temp_set = temp_set[:n_samples]
-#                 random.shuffle(temp_set)
-#                 train_set += temp_set[:n_train]
-#                 dev_set += temp_set[n_train:n_train + n_dev]
-#                 test_set += temp_set[n_train + n_dev:]
-
-#         elif ((word != "_background_noise_") and ("unknown" in word_list)):  # Adding unknown words
-#             if os.path.isdir(root_dir + word):  # 排除缓存文件e.g. .DS_Store
-#                 for wav_file in os.listdir(root_dir + word):
-#                     if wav_file.endswith(".wav"):
-#                         temp_set = [(root_dir + word + "/" + wav_file, "unknown")]
-#                         unknown_list += temp_set
-#                         # print(unknown_list[0])
-
-
-#     # Adding unknown category
-#     if ("unknown" in word_list):
-#         random.shuffle(unknown_list)
-#         # unknown_list = unknown_list[:n_samples]
-#         # n_samples = len(unknown_list)
-#         n_samples = 1500
-#         n_train = int(n_samples * split_pct[0])
-#         n_dev = int(n_samples * split_pct[1])
-
-#         train_set += unknown_list[:n_train]
-#         dev_set += unknown_list[n_train:n_train + n_dev]
-#         test_set += unknown_list[n_train + n_dev:]
-
-#     # Adding silence category
-#     if ("silence" in word_list):
-#         temp_set = [(root_dir + "_background_noise_" + "/" + wav_file, "silence") for wav_file in os.listdir(root_dir \
-#                                                                                                              + "_background_noise_")
-#                     if wav_file.endswith(".wav")]
-#         # if (len(temp_set) < n_samples):
-#         #     temp_set *= math.ceil(n_samples / len(temp_set))
-#         temp_set = temp_set[:n_samples]
-#         train_set += temp_set[:n_train]
-#         dev_set += temp_set[n_train:n_train + n_dev]
-#         test_set += temp_set[n_train + n_dev:]
-
-#     # Shuffling dataset
-#     random.shuffle(train_set)
-#     random.shuffle(dev_set)
-#     random.shuffle(test_set)
-
-#     return train_set, dev_set, test_set
 
 
 # 在train_set中的speaker 不会出现在valid_set和test_set里
@@ -426,17 +331,16 @@ class TripletSpeechDataset(data.Dataset):
 
     def load_data(self, data_element):
         """ Loads audio, shifts data and adds noise. """
-        # print(data_element)
-        wav_data = torchaudio.load(data_element[0])[0]
-        wav_data = F_audio.resample(wav_data, 16000, 8000)  # @NOTE: 下采样到8000，部署的时候改原采样率
+        # print(data_element) dataset/google_origin/yes/50ed8a7b_nohash_1.wav', 'yes', '50ed8a7b')
+        spec_data = torch.load(data_element[0].replace(".wav",".pt").replace("origin","origin_SPEC"))
+       
 
-        # Background noise used for silence needs to be shortened to 1 second.
-        if (data_element[1] == "silence"):
-            slice_idx = random.randint(0, wav_data.view(-1).shape[0] - self.sample_length - 1)
-            amplitude = random.random()
-            out_data = amplitude * wav_data[:, slice_idx:slice_idx + self.sample_length]
-        else:
-            out_data = 1 * wav_data
+        return (spec_data, data_element[1], data_element[2])
+    def process_audio(self, data_path):
+        wav_data = torchaudio.load(data_path)[0]
+        wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
+
+        out_data = 1 * wav_data
         # print(out_data.shape)
 
         data_len = 16000
@@ -449,20 +353,9 @@ class TripletSpeechDataset(data.Dataset):
             t = out_data.shape[1] - data_len
             out_data = out_data[:, t:data_len + t]
 
-        # print(out_data.shape)
-        # Adds audio shift (upto 100 ms)
-        if self.is_shift:
-            out_data = self.shift_audio(out_data)
-
-        # Add random noise
-        if self.is_noisy:
-            out_data += 0.01 * torch.randn(out_data.shape)
-            
         # to spectrum
         out_data = self.transforms(out_data)
-
-        return (out_data, data_element[1], data_element[2])
-
+        return out_data
 def get_loaders( root_dir, word_list,speaker_list):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
@@ -482,7 +375,7 @@ def get_loaders( root_dir, word_list,speaker_list):
     
 
     train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=32, shuffle=True)
-    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=32, shuffle=True)
+    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=1, shuffle=True)
     test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
 
     return [train_trip_loader, valid_trip_loader, test_trip_loader]
@@ -508,8 +401,8 @@ def create_csv(root_dir, word_list,speaker_list):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
     train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
-    dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
-    test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
+    dev_data = SpeechDataset(dev, "valid", ap, word_list, speaker_list)
+    test_data = SpeechDataset(test, "test", ap, word_list, speaker_list)
 
     train_trips = generate_triplets(train_data)
     # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
@@ -553,7 +446,7 @@ if __name__ == "__main__":
     # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     # speaker_list = fetch_speaker_list(root_dir,word_list)
     # @todo: data preparation
-    root_dir =  "dataset/google_origin/"
+    root_dir =  "dataset/google_origin_SPEC/"
     word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
     speaker_list = fetch_speaker_list(root_dir,word_list)
   
