@@ -15,7 +15,8 @@ time_check = True
 
 # train_on_gpu = False
 time_check = False
-device = "cuda" if train_on_gpu else "cpu"
+device = "cpu"
+# device = "cuda" if train_on_gpu else "cpu"
 
 
 
@@ -170,7 +171,7 @@ class DenoiseLoss(nn.Module):
             raise ValueError("Unsupported loss type. Choose 'l1' or 'l2'.") 
         
         
-def train(model, num_epochs, loaders):
+def train(model, num_epochs, loaders,args):
     """
     Trains and validates the model.
 
@@ -182,8 +183,8 @@ def train(model, num_epochs, loaders):
     """
     if train_on_gpu:
         model.to(device)
-
-    [train_dataloader, dev_dataloader, test_dataloader] = loaders
+    [train_dataloader, test_dataloader, dev_dataloader] = loaders
+    # [train_dataloader, dev_dataloader, test_dataloader] = loaders
 
     criterion_kws = nn.CrossEntropyLoss()  # For keyword spotting
     criterion_speaker = nn.TripletMarginLoss(margin=1.0, p=2)  # For speaker identification
@@ -322,7 +323,7 @@ def train(model, num_epochs, loaders):
         print(f"################################################################")
         speaker_loss = total_valid_loss_speaker / len(dev_dataloader)
         if (prev_kws_acc < valid_accuracy ):
-            model.save(name=f"google_noisy/no_denoise_no_orth_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}_eer_{EER*100:.4f}")
+            model.save(name=f"google_noisy/our_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}_eer_{EER*100:.4f}")
             prev_kws_acc = valid_accuracy
             prev_speaker_loss = speaker_loss
             prev_EER = EER

@@ -21,14 +21,15 @@ import unet
 class SiameseTCResNet(nn.Module):
     def __init__(self, k, n_mels, n_classes, n_speaker):
         super(SiameseTCResNet, self).__init__()
+        self.args = None
         # 使用TCResNet8作为子网络
         self.network = TCResNet8(k, n_mels, n_classes, n_speaker)
         self.denoise_net = unet.UNet()
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
-        # anchor = self.denoise_net(anchor)
-        # pos = self.denoise_net(pos)
-        # neg = self.denoise_net(neg)
+        anchor = self.denoise_net(anchor)
+        pos = self.denoise_net(pos)
+        neg = self.denoise_net(neg)
         self.denoised_anchor = anchor
         # 分别处理3个输入
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
@@ -46,6 +47,11 @@ class SiameseTCResNet(nn.Module):
     def load(self, name="SimTCResNet8"):
         self.load_state_dict(torch.load("saved_model/" + name, map_location=lambda storage, loc: storage))
 
+    def set_args(self, args):
+        self.args = args
+        for name, module in self.__dict__.items():
+            if isinstance(module, nn.Module):
+                module.set_args(args)
 class S2_Block(nn.Module):
     """ S2 ConvBlock using Depth-wise and Point-wise Convolution """
 
@@ -92,7 +98,7 @@ class TCResNet8(nn.Module):
 
     def __init__(self, k, n_mels, n_classes, n_speaker):
         super(TCResNet8, self).__init__()
-
+        self.args = None
         # First Convolution layer (Depth-wise and Point-wise)
         self.dw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=(1, 3),
                                        padding=(0, 1), bias=True)
@@ -137,8 +143,8 @@ class TCResNet8(nn.Module):
         #                                padding=(1, 1), bias=True)
         # self.conv_sk = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
         #                                padding=(1, 1), bias=True)
-        # self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
-        # self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
         self.test = nn.Linear(48,48)
