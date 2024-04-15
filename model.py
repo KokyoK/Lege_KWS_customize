@@ -7,6 +7,7 @@ torch.manual_seed(42)
 import thop
 import unet
 import time
+from mamba import simple_mamba
 from ptflops import get_model_complexity_info
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
@@ -27,7 +28,8 @@ class SiameseTCResNet(nn.Module):
         # 使用TCResNet8作为子网络
         self.network = TCResNet8(k, n_mels, n_classes, n_speaker)
         self.network = unet.StarNet()
-        self.denoise_net = unet.UNet()
+        # self.denoise_net = unet.UNet()
+        self.denoise_net = simple_mamba.Mamba()
         # self.denoise_net = unet.StarNet()
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):

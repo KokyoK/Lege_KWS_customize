@@ -168,20 +168,20 @@ if __name__ == '__main__':
     output_tensor = starnet(input_tensor)
     # print(output_tensor.shape)
 
-    # flops, params = thop.profile(unet,inputs=(input_tensor,))
-    # print(f"U NET flops {flops}, params {params}")
+    flops, params = thop.profile(unet,inputs=(input_tensor,))
+    print(f"U NET flops {flops}, params {params}")
 
     
     # output_tensor = starnet(input_tensor)
     macs, params = thop.profile(starnet,inputs=(input_tensor,))
-    start = time.time()
-    for i in range(1000):
-        out = starnet(input_tensor)
-    end = time.time()
-    print("Running time of start net: ", (end-start)) # ms
+    # start = time.time()
+    # for i in range(1000):
+    #     out = starnet(input_tensor)
+    # end = time.time()
+    # print("Running time of start net: ", (end-start)) # ms
     print(f"STAR NET macs {macs}, params {params}")
     
 
-    flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
-    print('flops: ', flops, 'params: ', params)
+    # flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
+    # print('flops: ', flops, 'params: ', params)
 
