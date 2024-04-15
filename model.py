@@ -6,6 +6,8 @@ import noisy_dataset as nsd
 torch.manual_seed(42)
 import thop
 import unet
+import time
+from ptflops import get_model_complexity_info
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -24,7 +26,9 @@ class SiameseTCResNet(nn.Module):
         self.args = None
         # 使用TCResNet8作为子网络
         self.network = TCResNet8(k, n_mels, n_classes, n_speaker)
+        self.network = unet.StarNet()
         self.denoise_net = unet.UNet()
+        # self.denoise_net = unet.StarNet()
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
         anchor = self.denoise_net(anchor)
@@ -177,23 +181,20 @@ class TCResNet8(nn.Module):
         # k_map = k_map.unsqueeze(2).unsqueeze(3)
         # s_map = s_map.unsqueeze(2).unsqueeze(3)
         # ###
-        kk = F.linear(k_map, self.w_kk)
-        ks = F.linear(k_map, self.w_ks)
-        sk = F.linear(s_map, self.w_sk)
-        ss = F.linear(s_map, self.w_ss)
-        k_map = kk.unsqueeze(2).unsqueeze(3)
-        s_map = ss.unsqueeze(2).unsqueeze(3)
+        # kk = F.linear(k_map, self.w_kk)
+        # ks = F.linear(k_map, self.w_ks)
+        # sk = F.linear(s_map, self.w_sk)
+        # ss = F.linear(s_map, self.w_ss)
+        # k_map = kk.unsqueeze(2).unsqueeze(3)
+        # s_map = ss.unsqueeze(2).unsqueeze(3)
         
-        # kk = self.w_kk @ k_map.T
-        # ks = self.w_ks @ k_map.T
-        # ss = self.w_ss @ s_map.T
-        # sk = self.w_sk @ s_map.T
-        # sk = self.conv_sk(sk)
-        # ks = self.conv_ks(ks)
-
-
-        # k_map = kk.T.unsqueeze(2).unsqueeze(3)
-        # s_map = ss.T.unsqueeze(2).unsqueeze(3)
+        # better
+        kk = self.w_kk @ k_map.T
+        ks = self.w_ks @ k_map.T
+        ss = self.w_ss @ s_map.T
+        sk = self.w_sk @ s_map.T
+        k_map = kk.T.unsqueeze(2).unsqueeze(3)
+        s_map = ss.T.unsqueeze(2).unsqueeze(3)
 
         
         # print(k_map.shape)
@@ -234,8 +235,19 @@ if __name__ == "__main__":
     
    
     tcres = TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
-    flops, params = thop.profile(tcres,inputs=(x,))
-    print(f"flops {flops}, params {params}")
+    macs, params = thop.profile(tcres,inputs=(x,))
+    print(f"macs {macs}, params {params}")
+    
+    flops, params = get_model_complexity_info(tcres, (40,1,101), as_strings=True, print_per_layer_stat=True)
+    print('flops: ', flops, 'params: ', params)
+    
+    start = time.time()
+    for i in range(1000):
+        out = tcres(x)
+    end = time.time()
+    print("Running time of tcresnet: ", (end-start))
+    
+    
     # ROOT_DIR = "dataset/lege/"
     # WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     # SPEAKER_LIST = sd.fetch_speaker_list(ROOT_DIR, WORD_LIST)

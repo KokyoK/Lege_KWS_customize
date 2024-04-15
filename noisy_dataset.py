@@ -394,7 +394,8 @@ class TripletSpeechDataset(data.Dataset):
             for i in range(len(triplet)):
                 spec, clean_spec, cur_element = self.load_data(triplet[i])
                 triplet[i] = (spec,clean_spec, [self.word_list.index(cur_element[0]), self.speaker_list.index(cur_element[1]),cur_element[2],cur_element[3]])
-            self.triplet_list[j] = triplet    
+            self.triplet_list[j] = triplet   
+ 
     def __len__(self):
         return len(self.triplet_list)
 
@@ -477,8 +478,8 @@ def get_loaders( root_dir, word_list,speaker_list):
     test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
 
     train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=32, shuffle=True)
-    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=32, shuffle=True)
-    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=32, shuffle=True)
+    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=1, shuffle=True)
+    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
 
     return [train_trip_loader, valid_trip_loader, test_trip_loader]
 

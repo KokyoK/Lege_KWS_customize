@@ -22,6 +22,12 @@ parser = argparse.ArgumentParser(description='Keyword spotting')
 # parser.add_argument('--device', default="board", help='')
 parser.add_argument('--orth', default="yes", help='')
 parser.add_argument('--denoise', default="yes", help='')
+parser.add_argument('--k', default=1, type=float, help='')
+parser.add_argument('--s', default=1, type=float, help='')
+
+parser.add_argument('--log', default="logs/record.csv", help='')
+parser.add_argument('--ptname', default="our", help='')
+parser.add_argument('--train', default="yes", help='')
 args = parser.parse_args()
 print(args)
 
@@ -44,9 +50,9 @@ print("keyword number:", len(WORD_LIST))
 print("speaker number:", len(SPEAKER_LIST))
 if __name__ == "__main__":
     model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
-
+    print("Get models done.")
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     print("Get loaders done.")
     model_fp32.set_args(args)
 

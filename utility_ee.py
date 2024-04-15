@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.utils.data as data
 import speech_dataset as sd
 import model as md
+import csv
+import log_helper
 
 import numpy as np
 from sklearn.metrics import roc_curve
@@ -15,8 +17,8 @@ time_check = True
 
 # train_on_gpu = False
 time_check = False
-device = "cpu"
-# device = "cuda" if train_on_gpu else "cpu"
+
+device = "cuda" if train_on_gpu else "cpu"
 
 
 
@@ -181,6 +183,8 @@ def train(model, num_epochs, loaders,args):
     loaders: List of DataLoaders (train, validation, test).
     device: The device to train on ('cuda' or 'cpu').
     """
+    logger = log_helper.CsvLogger(filename=args.log,
+                                  head=["Epoch","KWS ACC","SV_EER","SV_FRR_1","SV_FRR_10",])
     if train_on_gpu:
         model.to(device)
     [train_dataloader, test_dataloader, dev_dataloader] = loaders
@@ -194,8 +198,8 @@ def train(model, num_epochs, loaders,args):
 
     # optimizer = torch.optim.Adam(model.network.parameters(), lr=1e-4, weight_decay=0)
     optimizer = torch.optim.Adam([
-        {'params': model.network.parameters(), 'lr': 1e-4},  # 第一个损失函数更新 layer1 的参数
-        {'params': model.denoise_net.parameters(), 'lr': 1e-3}    # 第二个损失函数更新 layer2 的参数
+        {'params': model.network.parameters(), 'lr': 1e-4}, 
+        {'params': model.denoise_net.parameters(), 'lr': 1e-3}    
     ])
     prev_kws_acc = 0
     prev_speaker_loss = 999
@@ -230,9 +234,10 @@ def train(model, num_epochs, loaders,args):
             loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean)
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-            loss_orth = criterion_orth(model.network)
-            # loss = loss_denoise + loss_kws + loss_speaker + loss_orth
-            loss = loss_kws + loss_speaker + loss_orth
+            # loss_orth = criterion_orth(model.network)
+            loss_orth = loss_speaker
+            loss =  loss_kws + 2*loss_speaker + loss_orth
+            # loss = loss_kws + loss_speaker + loss_orth
             
             # loss_denoise.backward(retain_graph=True)
             loss.backward()
@@ -295,8 +300,9 @@ def train(model, num_epochs, loaders,args):
                 loss_denoise = criterion_noise(anchor_clean, model.denoised_anchor)
                 loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
                 loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-                loss_orth = criterion_orth(model.network)
-                loss = loss_denoise + loss_kws + loss_speaker + loss_orth
+                # loss_orth = criterion_orth(model.network)
+                loss_orth = loss_speaker
+                loss = loss_kws + loss_speaker + loss_orth
 
                 total_valid_loss += loss.item()
                 total_valid_loss_denoise += loss_denoise.item()
@@ -305,28 +311,56 @@ def train(model, num_epochs, loaders,args):
                 total_valid_loss_orth += loss_orth.item()
                 total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
                 total_samples += anchor_kws_label.size(0)
-        # Compute ROC curve and ROC area for each class
+                        # 计算说话人之间的相似度分数    
+                scores = -torch.norm(anchor_out_speaker - positive_out_speaker, p=2)
+                all_scores.append(float(scores.cpu().numpy()))
+                all_labels.append([1])
+                # negative pair
+                scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
+                all_scores.append(float(scores.cpu().numpy()))
+                all_labels.append([0])
+        # 计算 ROC 曲线
         fpr, tpr, threshold = roc_curve(all_labels, all_scores)
         fnr = 1 - tpr
+        # 找到在 FAR 为 1% 时的 FRR 和阈值
+        frr_at_1_idx = np.argmax(fpr >= 0.01)
+        frr_at_1 = fnr[frr_at_1_idx]
+        threshold_at_1 = threshold[frr_at_1_idx]
+        # 找到在 FAR 为 10% 时的 FRR 和阈值
+        frr_at_10_idx = np.argmax(fpr >= 0.1)
+        frr_at_10 = fnr[frr_at_10_idx]
+        threshold_at_10 = threshold[frr_at_10_idx]
+        # eer
         eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
         EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]  # Equal Error Rate
+
+
 
         avg_valid_loss = total_valid_loss / len(dev_dataloader)
         valid_accuracy = total_correct_kws / total_samples * 100
         print(f"###################################    Epoch {epoch+1}/{num_epochs}     ###########################")
+        print(f"FRR at  1%: {frr_at_1*100:.4f}% FAR, Threshold at  1% FAR: {threshold_at_1:.4f}",)
+        print(f"FRR at 10%: {frr_at_10*100:.4f}% FAR, Threshold at 10% FAR: {threshold_at_10:.4f}",)
+        print("EER: {:.4f} % at threshold {:.4f}".format(EER*100, eer_threshold))
+        print("---------------------------------------------------------------------------------")
         print(f' Train Accuracy KWS: {train_accuracy:.2f}%  ｜ Train Loss: {avg_train_loss:.4f}')
         print(f' Valid Accuracy KWS: {valid_accuracy:.2f}%  ｜ Valid Loss: {avg_valid_loss:.4f}')
-        print(f'Train Loss Denoise: {total_train_loss_denoise / len(train_dataloader):.4f} | Train Loss KWS: {total_train_loss_kws / len(train_dataloader):.4f}｜ Train Loss Speaker: {total_train_loss_speaker / len(train_dataloader):.4f}｜ Train Loss Orth: {total_train_loss_orth / len(train_dataloader):.4f}')
-        print(f'Valid Loss Denoise: {total_valid_loss_denoise / len(dev_dataloader):.4f} | Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}｜ Valid Loss Speaker: {total_valid_loss_speaker / len(dev_dataloader):.4f}｜ Valid Loss Orth: {total_valid_loss_orth / len(dev_dataloader):.4f}')
-        print("EER: {:.4f} at threshold {:.4f}".format(EER*100, eer_threshold))
+        print(f'Train Loss KWS: {total_train_loss_kws / len(train_dataloader):.4f}｜ Train Loss Speaker: {total_train_loss_speaker / len(train_dataloader):.4f}｜ Train Loss Orth: {total_train_loss_orth / len(train_dataloader):.4f}')
+        print(f'Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}｜ Valid Loss Speaker: {total_valid_loss_speaker / len(dev_dataloader):.4f}｜ Valid Loss Orth: {total_valid_loss_orth / len(dev_dataloader):.4f}')
         # print(f'Total Valid Loss KWS: {total_valid_loss_kws / len(dev_dataloader):.4f}')
         print(f"################################################################")
+        logger.log(([
+                        f"{epoch}",
+                        f"{valid_accuracy:.4f}",
+                        f"{EER*100:.4f}",
+                        f"{frr_at_1*100:.4f}",
+                        f"{frr_at_10*100:.4f}"
+                                  ]))
         speaker_loss = total_valid_loss_speaker / len(dev_dataloader)
-        if (prev_kws_acc < valid_accuracy ):
-            model.save(name=f"google_noisy/our_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}_eer_{EER*100:.4f}")
+        if (speaker_loss < prev_speaker_loss ):
+            model.save(name=f"google_noisy/{args.ptname}_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}")
             prev_kws_acc = valid_accuracy
             prev_speaker_loss = speaker_loss
-            prev_EER = EER
     print("Training complete.")
 
 # Example usage:

@@ -6,6 +6,10 @@ import noisy_dataset as nsd
 from timm.models.layers import DropPath, trunc_normal_
 from timm.models.registry import register_model
 import thop
+import time
+from ptflops import get_model_complexity_info
+import copy
+
 torch.manual_seed(42)
 class UNet(nn.Module):
     def __init__(self):
@@ -46,14 +50,19 @@ class UNet(nn.Module):
 
         return c6
 
-class ConvBN(torch.nn.Sequential):
+class ConvBN(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, with_bn=True):
         super().__init__()
-        self.add_module('conv', torch.nn.Conv2d(in_planes, out_planes, kernel_size, stride, padding, dilation, groups))
+        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size, stride, padding, dilation, groups)
+        self.bn = nn.BatchNorm2d(out_planes) if with_bn else nn.Identity()
         if with_bn:
-            self.add_module('bn', torch.nn.BatchNorm2d(out_planes))
-            torch.nn.init.constant_(self.bn.weight, 1)
-            torch.nn.init.constant_(self.bn.bias, 0)
+            nn.init.constant_(self.bn.weight, 1)
+            nn.init.constant_(self.bn.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        return x
               
 class Block(nn.Module):
     def __init__(self, dim, mlp_ratio=2, drop_path=0.):
@@ -76,7 +85,7 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, 1, 1], mlp_ratio=2, drop_path_rate=0.0, num_classes=10, **kwargs):
+    def __init__(self, base_dim=16, depths=[1, 1, 1,], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, **kwargs):
         super().__init__()
         self.num_classes = num_classes
         self.in_channel = 16
@@ -94,17 +103,48 @@ class StarNet(nn.Module):
             blocks = [Block(self.in_channel, mlp_ratio, dpr[cur + i]) for i in range(depths[i_layer])]
             cur += depths[i_layer]
             self.stages.append(nn.Sequential(down_sampler, *blocks))
+        self.k_block = copy.deepcopy(self.stages[len(depths)-1])
+        self.s_block = copy.deepcopy(self.k_block)
         self.norm = nn.BatchNorm2d(self.in_channel)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.head = nn.Linear(self.in_channel, num_classes)
-        self.apply(self._init_weights)
+
+        self.head_k = nn.Linear(self.in_channel, num_classes)
+        self.head_s = nn.Linear(self.in_channel, n_speaker)
+        
+        self.d = 64  # feature数
+        self.w_kk = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        self.w_ks = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        self.w_ss = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        self.w_sk = nn.Parameter(torch.randn(
+            self.d, self.d), requires_grad=True)
+        # self.apply(self._init_weights)
 
     def forward(self, x):
         x = self.stem(x)
-        for stage in self.stages:
+        for i in range(len(self.stages)-1):
+            stage = self.stages[i]
             x = stage(x)
-        x = torch.flatten(self.avgpool(self.norm(x)), 1)
-        return self.head(x)
+        k_map = self.k_block(x)
+        k_map = torch.flatten(self.avgpool(self.norm(k_map)), 1)
+        # print(k_map.shape)
+        s_map = self.s_block(x)
+        s_map = torch.flatten(self.avgpool(self.norm(s_map)), 1)
+        
+        kk = self.w_kk @ k_map.T
+        ks = self.w_ks @ k_map.T
+        ss = self.w_ss @ s_map.T
+        sk = self.w_sk @ s_map.T
+        k_map = kk.T
+        s_map = ss.T
+        # k_map = kk.T.unsqueeze(2).unsqueeze(3)
+        # s_map = ss.T.unsqueeze(2).unsqueeze(3)
+        # print(k_map.shape)
+        out_k = self.head_k(k_map)
+        out_s = self.head_s(s_map)
+        return out_k, out_s, x, x
     
     def _init_weights(self, m):
         if isinstance(m, nn.Linear or nn.Conv2d):
@@ -125,16 +165,23 @@ if __name__ == '__main__':
     input_tensor = torch.randn(1, 40, 1, 101)  # batch_size=4
     clean_tensor = torch.randn(1, 40, 1, 101) 
 
-    output_tensor = unet(input_tensor)
-    print(output_tensor.shape)
+    output_tensor = starnet(input_tensor)
+    # print(output_tensor.shape)
+
     # flops, params = thop.profile(unet,inputs=(input_tensor,))
     # print(f"U NET flops {flops}, params {params}")
-    # print(output_tensor.shape)
+
     
     # output_tensor = starnet(input_tensor)
-    # flops, params = thop.profile(starnet,inputs=(input_tensor,))
-    # print(f"STAR NET flops {flops}, params {params}")
-    # print(output_tensor.shape)
-    # snr = calculate_snr(input_tensor, clean_tensor)
-    # print(f'SNR: {snr.item()} dB')
+    macs, params = thop.profile(starnet,inputs=(input_tensor,))
+    start = time.time()
+    for i in range(1000):
+        out = starnet(input_tensor)
+    end = time.time()
+    print("Running time of start net: ", (end-start)) # ms
+    print(f"STAR NET macs {macs}, params {params}")
+    
+
+    # flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
+    # print('flops: ', flops, 'params: ', params)
 
