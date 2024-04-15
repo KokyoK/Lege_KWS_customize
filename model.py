@@ -31,9 +31,9 @@ class SiameseTCResNet(nn.Module):
         # self.denoise_net = unet.StarNet()
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
-        anchor = self.denoise_net(anchor)
-        pos = self.denoise_net(pos)
-        neg = self.denoise_net(neg)
+        # anchor = self.denoise_net(anchor)
+        # pos = self.denoise_net(pos)
+        # neg = self.denoise_net(neg)
         self.denoised_anchor = anchor
         # 分别处理3个输入
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)

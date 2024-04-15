@@ -54,7 +54,7 @@ def calculate_snr(clean_spectrogram, noisy_spectrogram):
 
     return snr
 
-def evaluate_testset(model, test_dataloader):
+def evaluate_testset(model, test_dataloader,args):
     model.eval()  # Set the model to evaluation mode
     all_scores = []
     all_labels = []
@@ -73,21 +73,14 @@ def evaluate_testset(model, test_dataloader):
 
             anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
-            # 计算说话人之间的相似度分数
-            # scores = F.cosine_similarity(anchor_out_speaker, positive_out_speaker)
-            scores = -torch.norm(anchor_out_speaker - positive_out_speaker, p=2)
-
-            # 标签为 1 表示同一个说话人，0 表示不同说话人
-            all_scores.append(float(scores.cpu().numpy()))
-            all_labels.append([1])
-
-            # 你也可以加入 negative pair 的分数和标签
-            # _, anchor_out_speaker, _, negative_out_speaker = model(anchor_data, negative_data, negative_data)
-            scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
-            all_scores.append(float(scores.cpu().numpy()))
-            all_labels.append([0])
+            scores, labels = calculate_similarity_and_metrics(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
+            all_scores.extend(scores)
+            all_labels.extend(labels)
+            
             total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
             total_samples += anchor_kws_label.size(0)
+
+
             
     test_accuracy = total_correct_kws / total_samples * 100
     print(f'Test Accuracy KWS: {test_accuracy:.2f}%' )
@@ -236,7 +229,7 @@ def train(model, num_epochs, loaders,args):
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
             # loss_orth = criterion_orth(model.network)
             loss_orth = loss_speaker
-            loss =  loss_kws + 2*loss_speaker + loss_orth
+            loss =  loss_denoise + loss_kws + 2*loss_speaker + loss_orth
             # loss = loss_kws + loss_speaker + loss_orth
             
             # loss_denoise.backward(retain_graph=True)
@@ -286,15 +279,6 @@ def train(model, num_epochs, loaders,args):
                 anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data,
                                                                                                        positive_data,
                                                                                                        negative_data)
-                # calulate eer  # 标签为 1 表示同一个说话人，0 表示不同说话人
-                scores = -torch.norm(anchor_out_speaker - positive_out_speaker, p=2)
-                all_scores.append(float(scores.cpu().numpy()))
-                all_labels.append([1])
-                
-                scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
-                all_scores.append(float(scores.cpu().numpy()))
-                all_labels.append([0])
-                
                 
                 # calculate loss
                 loss_denoise = criterion_noise(anchor_clean, model.denoised_anchor)
@@ -311,14 +295,12 @@ def train(model, num_epochs, loaders,args):
                 total_valid_loss_orth += loss_orth.item()
                 total_correct_kws += torch.sum(torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).item()
                 total_samples += anchor_kws_label.size(0)
-                        # 计算说话人之间的相似度分数    
-                scores = -torch.norm(anchor_out_speaker - positive_out_speaker, p=2)
-                all_scores.append(float(scores.cpu().numpy()))
-                all_labels.append([1])
-                # negative pair
-                scores = -torch.norm(anchor_out_speaker - negative_out_speaker, p=2)
-                all_scores.append(float(scores.cpu().numpy()))
-                all_labels.append([0])
+                
+                scores, labels = calculate_similarity_and_metrics(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
+                all_scores.extend(scores)
+                all_labels.extend(labels)
+                
+
         # 计算 ROC 曲线
         fpr, tpr, threshold = roc_curve(all_labels, all_scores)
         fnr = 1 - tpr
@@ -362,7 +344,21 @@ def train(model, num_epochs, loaders,args):
             prev_kws_acc = valid_accuracy
             prev_speaker_loss = speaker_loss
     print("Training complete.")
+    
+def calculate_similarity_and_metrics(anchor_out_speaker, positive_out_speaker, negative_out_speaker):
+    # 计算正样本对的相似度
+    pos_distances = torch.norm(anchor_out_speaker - positive_out_speaker, p=2, dim=1)
+    neg_distances = torch.norm(anchor_out_speaker - negative_out_speaker, p=2, dim=1)
+    
+    # 将距离转换为相似度分数（负距离）
+    pos_scores = -pos_distances
+    neg_scores = -neg_distances
 
+    # 准备标签
+    labels = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(neg_scores)]).view(-1).cpu().numpy().tolist()
+    scores = torch.cat([pos_scores, neg_scores]).view(-1).cpu().numpy().tolist()
+    print(labels)
+    return scores, labels
 # Example usage:
 # model = YourModel()
 # train_and_validate(model, num_epochs, loaders, device='cuda' if torch.cuda.is_available() else 'cpu')

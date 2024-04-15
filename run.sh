@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py > logs/noisy/log_our.py 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/record_no_denoise.csv > logs/noisy/log_our.py 2>&1 &

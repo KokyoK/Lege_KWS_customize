@@ -85,7 +85,7 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, 1,], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, **kwargs):
+    def __init__(self, base_dim=16, depths=[1, 1, 1,1], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, **kwargs):
         super().__init__()
         self.num_classes = num_classes
         self.in_channel = 16
@@ -111,7 +111,7 @@ class StarNet(nn.Module):
         self.head_k = nn.Linear(self.in_channel, num_classes)
         self.head_s = nn.Linear(self.in_channel, n_speaker)
         
-        self.d = 64  # feature数
+        self.d = 128  # feature数
         self.w_kk = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
         self.w_ks = nn.Parameter(torch.randn(
@@ -182,6 +182,6 @@ if __name__ == '__main__':
     print(f"STAR NET macs {macs}, params {params}")
     
 
-    # flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
-    # print('flops: ', flops, 'params: ', params)
+    flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
+    print('flops: ', flops, 'params: ', params)
 

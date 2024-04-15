@@ -478,8 +478,8 @@ def get_loaders( root_dir, word_list,speaker_list):
     test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
 
     train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=32, shuffle=True)
-    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=1, shuffle=True)
-    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
+    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=32, shuffle=True)
+    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=32, shuffle=True)
 
     return [train_trip_loader, valid_trip_loader, test_trip_loader]
 
