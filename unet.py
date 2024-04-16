@@ -122,27 +122,29 @@ class StarNet(nn.Module):
         self.w_sk = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
         # self.apply(self._init_weights)
-        # self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
-        # self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
     def forward(self, x):
         x = self.stem(x)
         for i in range(len(self.stages)-1):
             stage = self.stages[i]
             x = stage(x)
-        # attn_k, attn_k_weights = self.k_attn(share_map_T, share_map_T, share_map_T)
-        # attn_s, attn_s_weights = self.s_attn(share_map_T, share_map_T, share_map_T)
-        
-        # attn_k = attn_k.squeeze(-1).permute(1,0,2) # 移除最后一个维度
-        # attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
-        
-        # k_map_T = x.squeeze(2).permute(1, 0, 2)    
-        # s_map_T = x.squeeze(2).permute(1, 0, 2)    
-        
-        # attn_k, attn_k_weights = self.k_attn(k_map_T, k_map_T, k_map_T)
-        # attn_s, attn_s_weights = self.s_attn(s_map_T, s_map_T, s_map_T)
-        
-        # k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
-        # s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
+        if self.args.att == "yes":
+            share_map_T = x.squeeze(2).permute(1, 0, 2)
+            attn_k, attn_k_weights = self.k_attn(share_map_T, share_map_T, share_map_T)
+            attn_s, attn_s_weights = self.s_attn(share_map_T, share_map_T, share_map_T)
+            
+            attn_k = attn_k.squeeze(-1).permute(1,0,2) # 移除最后一个维度
+            attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
+            
+            k_map_T = x.squeeze(2).permute(1, 0, 2)    
+            s_map_T = x.squeeze(2).permute(1, 0, 2)    
+            
+            attn_k, attn_k_weights = self.k_attn(k_map_T, k_map_T, k_map_T)
+            attn_s, attn_s_weights = self.s_attn(s_map_T, s_map_T, s_map_T)
+            
+            k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
+            s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
         
         k_map = self.k_block(x)
         s_map = self.s_block(x)
