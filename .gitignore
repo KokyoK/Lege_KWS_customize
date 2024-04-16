@@ -9,3 +9,4 @@ input_samples/
 /.idea/
 /*.gz
 mamba/__pycache__
+*.pth

@@ -31,6 +31,7 @@ parser.add_argument('--train', default="yes", help='')
 parser.add_argument('--denoise_loss', default="yes", help='')
 parser.add_argument('--orth_loss', default="yes", help='')
 parser.add_argument('--backbone', default="res", help='')
+parser.add_argument('--denoise_net', default="unet", help='')
 parser.add_argument('--att', default="yes", help='')
 args = parser.parse_args()
 print(args)
@@ -56,7 +57,8 @@ if __name__ == "__main__":
     model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST),args=args)
     print("Get models done.")
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    # loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    loaders = torch.load("loaders.pth")
     print("Get loaders done.")
     model_fp32.set_args(args)
 
@@ -66,7 +68,7 @@ if __name__ == "__main__":
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        # model_fp32.load("google_noisy/no_denoiseorth_45_kwsacc_85.49_idloss_0.5300_eer_0.4405")
+        model_fp32.load("google_noisy/our_41_kwsacc_78.32_idloss_0.3318")
         util.evaluate_testset(model_fp32, loaders[2],args)
         
 

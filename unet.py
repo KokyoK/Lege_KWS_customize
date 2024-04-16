@@ -122,8 +122,8 @@ class StarNet(nn.Module):
         self.w_sk = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
         # self.apply(self._init_weights)
-        self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
-        self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        # self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        # self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
     def forward(self, x):
         x = self.stem(x)
         for i in range(len(self.stages)-1):
@@ -144,27 +144,24 @@ class StarNet(nn.Module):
         # k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
         # s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
         
-        # k_map = self.k_block(k_map)
-        # s_map = self.s_block(s_map)
-        
         k_map = self.k_block(x)
         s_map = self.s_block(x)
+        if self.args.orth_loss == "yes":     
+            kk = self.w_kk @ k_map.T
+            ks = self.w_ks @ k_map.T
+            ss = self.w_ss @ s_map.T
+            sk = self.w_sk @ s_map.T
+            k_map = kk.T
+            s_map = ss.T
+        
 
         k_map = torch.flatten(self.avgpool(self.norm(k_map)), 1)
         s_map = torch.flatten(self.avgpool(self.norm(s_map)), 1)
-        
-        
-        kk = self.w_kk @ k_map.T
-        ks = self.w_ks @ k_map.T
-        ss = self.w_ss @ s_map.T
-        sk = self.w_sk @ s_map.T
-        k_map = kk.T
-        s_map = ss.T
 
 
         out_k = self.head_k(k_map)
         out_s = self.head_s(s_map)
-        return out_k, out_s, x, x
+        return out_k, out_s, k_map, s_map
     
     def _init_weights(self, m):
         if isinstance(m, nn.Linear or nn.Conv2d):
