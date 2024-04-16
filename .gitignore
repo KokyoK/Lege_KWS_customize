@@ -8,3 +8,4 @@ input_samples/
 /.vscode/
 /.idea/
 /*.gz
+mamba/__pycache__

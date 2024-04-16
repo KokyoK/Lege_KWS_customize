@@ -1,6 +1,9 @@
 import math
 from dataclasses import dataclass
 from typing import Union
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import torch
 import torch.nn as nn
@@ -76,15 +79,15 @@ class OutputReshapeModel(nn.Module):
         super().__init__()
         self.fc = nn.Linear(input_features, 260)  # 与 ConvInputModel 中的 flatten 相反
         self.deconv1 = nn.ConvTranspose2d(20, 20, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), output_padding=(0, 1))
-        self.deconv2 = nn.ConvTranspose2d(20, output_channels, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), output_padding=(0, 1))
+        # 更新第二个转置卷积层，以确保输出维度正确
+        self.deconv2 = nn.ConvTranspose2d(20, output_channels, kernel_size=(1, 3), stride=(1, 4), padding=(0, 1), output_padding=(0, 0))
 
     def forward(self, x):
         x = self.fc(x)
         x = x.view(-1, 20, 1, 13)  # 与 pool 层相反
         x = F.relu(self.deconv1(x))
         x = F.relu(self.deconv2(x))
-        return x
-    
+        return x 
     
 class Mamba(nn.Module):
     def __init__(self, input_channels=40,output_channels=40):
@@ -404,3 +407,4 @@ if __name__ == "__main__":
     print(output.shape)
     macs, params = profile(model,inputs=(input_tensor,))
     print(f"macs {macs}, params {params}")
+    # macs 4556160.0, params 29864.0

@@ -22,20 +22,27 @@ from ptflops import get_model_complexity_info
 
 
 class SiameseTCResNet(nn.Module):
-    def __init__(self, k, n_mels, n_classes, n_speaker):
+    def __init__(self, k, n_mels, n_classes, n_speaker,args):
         super(SiameseTCResNet, self).__init__()
-        self.args = None
+        self.args = args
         # 使用TCResNet8作为子网络
-        self.network = TCResNet8(k, n_mels, n_classes, n_speaker)
-        self.network = unet.StarNet()
-        # self.denoise_net = unet.UNet()
-        self.denoise_net = simple_mamba.Mamba()
+        if args.backbone =="res":
+            self.network = TCResNet8(k, n_mels, n_classes, n_speaker,args)
+        else:
+            self.network = unet.StarNet(args=args)
+        # self.network = unet.StarNet()
+        if args.denoise_net == "mamba":
+            self.denoise_net = simple_mamba.Mamba()
+        else:
+            self.denoise_net = unet.UNet()
+        # self.denoise_net = simple_mamba.Mamba()
         # self.denoise_net = unet.StarNet()
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
-        # anchor = self.denoise_net(anchor)
-        # pos = self.denoise_net(pos)
-        # neg = self.denoise_net(neg)
+        if self.args.denoise_loss == "yes":
+            anchor = self.denoise_net(anchor)
+            pos = self.denoise_net(pos)
+            neg = self.denoise_net(neg)
         self.denoised_anchor = anchor
         # 分别处理3个输入
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
@@ -102,9 +109,9 @@ class S2_Block(nn.Module):
 class TCResNet8(nn.Module):
     """ TC-ResNet8 using Depth-wise and Point-wise Convolution """
 
-    def __init__(self, k, n_mels, n_classes, n_speaker):
+    def __init__(self, k, n_mels, n_classes, n_speaker,args):
         super(TCResNet8, self).__init__()
-        self.args = None
+        self.args = args
         # First Convolution layer (Depth-wise and Point-wise)
         self.dw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=(1, 3),
                                        padding=(0, 1), bias=True)
@@ -191,12 +198,16 @@ class TCResNet8(nn.Module):
         # s_map = ss.unsqueeze(2).unsqueeze(3)
         
         # better
-        kk = self.w_kk @ k_map.T
-        ks = self.w_ks @ k_map.T
-        ss = self.w_ss @ s_map.T
-        sk = self.w_sk @ s_map.T
-        k_map = kk.T.unsqueeze(2).unsqueeze(3)
-        s_map = ss.T.unsqueeze(2).unsqueeze(3)
+        if self.args.orth_loss == "yes":       
+            kk = self.w_kk @ k_map.T
+            ks = self.w_ks @ k_map.T
+            ss = self.w_ss @ s_map.T
+            sk = self.w_sk @ s_map.T
+            k_map = kk.T.unsqueeze(2).unsqueeze(3)
+            s_map = ss.T.unsqueeze(2).unsqueeze(3)
+        else:
+            k_map = k_map.unsqueeze(2).unsqueeze(3)
+            s_map = s_map.unsqueeze(2).unsqueeze(3)
 
         
         # print(k_map.shape)

@@ -85,8 +85,9 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, 1,1], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, **kwargs):
+    def __init__(self, base_dim=16, depths=[1, 1, 1,1], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, args=None):
         super().__init__()
+        self.args = args
         self.num_classes = num_classes
         self.in_channel = 16
         self.stem = nn.Sequential(
@@ -121,17 +122,37 @@ class StarNet(nn.Module):
         self.w_sk = nn.Parameter(torch.randn(
             self.d, self.d), requires_grad=True)
         # self.apply(self._init_weights)
-
+        self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
     def forward(self, x):
         x = self.stem(x)
         for i in range(len(self.stages)-1):
             stage = self.stages[i]
             x = stage(x)
+        # attn_k, attn_k_weights = self.k_attn(share_map_T, share_map_T, share_map_T)
+        # attn_s, attn_s_weights = self.s_attn(share_map_T, share_map_T, share_map_T)
+        
+        # attn_k = attn_k.squeeze(-1).permute(1,0,2) # 移除最后一个维度
+        # attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
+        
+        # k_map_T = x.squeeze(2).permute(1, 0, 2)    
+        # s_map_T = x.squeeze(2).permute(1, 0, 2)    
+        
+        # attn_k, attn_k_weights = self.k_attn(k_map_T, k_map_T, k_map_T)
+        # attn_s, attn_s_weights = self.s_attn(s_map_T, s_map_T, s_map_T)
+        
+        # k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
+        # s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
+        
+        # k_map = self.k_block(k_map)
+        # s_map = self.s_block(s_map)
+        
         k_map = self.k_block(x)
-        k_map = torch.flatten(self.avgpool(self.norm(k_map)), 1)
-        # print(k_map.shape)
         s_map = self.s_block(x)
+
+        k_map = torch.flatten(self.avgpool(self.norm(k_map)), 1)
         s_map = torch.flatten(self.avgpool(self.norm(s_map)), 1)
+        
         
         kk = self.w_kk @ k_map.T
         ks = self.w_ks @ k_map.T
@@ -139,9 +160,8 @@ class StarNet(nn.Module):
         sk = self.w_sk @ s_map.T
         k_map = kk.T
         s_map = ss.T
-        # k_map = kk.T.unsqueeze(2).unsqueeze(3)
-        # s_map = ss.T.unsqueeze(2).unsqueeze(3)
-        # print(k_map.shape)
+
+
         out_k = self.head_k(k_map)
         out_s = self.head_s(s_map)
         return out_k, out_s, x, x

@@ -178,6 +178,7 @@ def train(model, num_epochs, loaders,args):
     """
     logger = log_helper.CsvLogger(filename=args.log,
                                   head=["Epoch","KWS ACC","SV_EER","SV_FRR_1","SV_FRR_10",])
+
     if train_on_gpu:
         model.to(device)
     [train_dataloader, test_dataloader, dev_dataloader] = loaders
@@ -189,7 +190,7 @@ def train(model, num_epochs, loaders,args):
     criterion_noise = DenoiseLoss()
 
 
-    # optimizer = torch.optim.Adam(model.network.parameters(), lr=1e-4, weight_decay=0)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=0)
     optimizer = torch.optim.Adam([
         {'params': model.network.parameters(), 'lr': 1e-4}, 
         {'params': model.denoise_net.parameters(), 'lr': 1e-3}    
@@ -227,10 +228,13 @@ def train(model, num_epochs, loaders,args):
             loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean)
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-            # loss_orth = criterion_orth(model.network)
-            loss_orth = loss_speaker
-            loss =  loss_denoise + loss_kws + 2*loss_speaker + loss_orth
-            # loss = loss_kws + loss_speaker + loss_orth
+            loss_orth = criterion_orth(model.network)
+            # loss_orth = loss_speaker
+            loss =  loss_kws + 2*loss_speaker
+            if args.denoise_loss =="yes":
+                loss += 0.1*loss_denoise 
+            if args.orth_loss == "yes":
+                loss += loss_orth
             
             # loss_denoise.backward(retain_graph=True)
             loss.backward()
@@ -357,7 +361,6 @@ def calculate_similarity_and_metrics(anchor_out_speaker, positive_out_speaker, n
     # 准备标签
     labels = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(neg_scores)]).view(-1).cpu().numpy().tolist()
     scores = torch.cat([pos_scores, neg_scores]).view(-1).cpu().numpy().tolist()
-    print(labels)
     return scores, labels
 # Example usage:
 # model = YourModel()

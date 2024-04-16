@@ -28,11 +28,15 @@ parser.add_argument('--s', default=1, type=float, help='')
 parser.add_argument('--log', default="logs/record.csv", help='')
 parser.add_argument('--ptname', default="our", help='')
 parser.add_argument('--train', default="yes", help='')
+parser.add_argument('--denoise_loss', default="yes", help='')
+parser.add_argument('--orth_loss', default="yes", help='')
+parser.add_argument('--backbone', default="res", help='')
+parser.add_argument('--att', default="yes", help='')
 args = parser.parse_args()
 print(args)
-
-
-TRAIN = True
+TRAIN = False
+if args.train == "yes":
+    TRAIN = True
 # ROOT_DIR = "dataset/google_origin/"
 ROOT_DIR = "dataset/google_noisy/NGSCD_SPEC/"
 WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
@@ -49,7 +53,7 @@ print("dataset root:", ROOT_DIR)
 print("keyword number:", len(WORD_LIST))
 print("speaker number:", len(SPEAKER_LIST))
 if __name__ == "__main__":
-    model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST))
+    model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST),args=args)
     print("Get models done.")
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
