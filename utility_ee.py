@@ -230,7 +230,7 @@ def train(model, num_epochs, loaders,args):
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
             loss_orth = criterion_orth(model.network)
             # loss_orth = loss_speaker
-            loss =  loss_kws + 2*loss_speaker
+            loss =  loss_kws + loss_speaker
             if args.denoise_loss =="yes":
                 loss += 0.1*loss_denoise 
             if args.orth_loss == "yes":

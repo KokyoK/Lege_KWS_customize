@@ -33,8 +33,11 @@ class SiameseTCResNet(nn.Module):
         # self.network = unet.StarNet()
         if args.denoise_net == "mamba":
             self.denoise_net = simple_mamba.Mamba()
-        else:
+        elif args.denoise_net == "unet":
             self.denoise_net = unet.UNet()
+        elif args.denoise_net == "sub":
+            self.denoise_net = Sub()
+            
         # self.denoise_net = simple_mamba.Mamba()
         # self.denoise_net = unet.StarNet()
         self.denoised_anchor = None
@@ -48,9 +51,6 @@ class SiameseTCResNet(nn.Module):
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
         out_k2, out_s2, map_k2, map_s2 = self.network(pos)
         out_k3, out_s3, map_k3, map_s3 = self.network(neg)
-
-
-
         return out_k1, map_s1, map_s2, map_s3
 
     def save(self, is_onnx=0, name="SimTCResNet8"):
@@ -235,6 +235,58 @@ class TCResNet8(nn.Module):
 
     def load(self, name="TCResNet8"):
         self.load_state_dict(torch.load("saved_model/" + name, map_location=lambda storage, loc: storage))
+
+import torch
+import torch.nn as nn
+
+class Sub(nn.Module):
+    def __init__(self, noise_estimation_length=10, alpha=1.0):
+        """
+        初始化谱减法模块。
+
+        参数:
+        noise_estimation_length: 用于噪声估计的时间帧数量，默认为10。
+        alpha: 噪声谱的放大系数，默认为1.0。
+        """
+        super(Sub, self).__init__()
+        self.noise_estimation_length = noise_estimation_length
+        self.alpha = alpha
+
+    def forward(self, stft_speech):
+        """
+        前向传播，执行谱减法去噪。
+
+        参数:
+        stft_speech: 含噪语音的STFT谱，形状为 [batch, 1, frequency, time]。
+
+        返回:
+        去噪后的语音信号的STFT谱。
+        """
+        # 估计噪声
+        noise_estimate = self.estimate_noise(stft_speech, self.noise_estimation_length)
+        
+        # 执行谱减法
+        subtracted_spectrum = stft_speech - self.alpha * noise_estimate
+        subtracted_spectrum_clipped = torch.clamp(subtracted_spectrum, min=0)  # 确保谱值非负
+        
+        return subtracted_spectrum_clipped
+
+    def estimate_noise(self, stft_speech, noise_estimation_length):
+        """
+        从含噪语音的STFT中估计噪声。
+        
+        参数:
+        stft_speech: 含噪语音的STFT谱，形状为 [batch, 1, frequency, time]。
+        noise_estimation_length: 用于噪声估计的时间帧数量。
+        
+        返回:
+        噪声的估计STFT谱，形状为 [batch, 1, frequency, time]。
+        """
+        # 取语音开头部分的平均作为噪声估计
+        noise_estimate = torch.mean(stft_speech[:, :, :, :noise_estimation_length], dim=-1, keepdim=True)
+        # 将噪声估计扩展到与语音相同的时间长度
+        noise_estimate = noise_estimate.expand(-1, -1, -1, stft_speech.size(-1))
+        return noise_estimate
 
 
 if __name__ == "__main__":
