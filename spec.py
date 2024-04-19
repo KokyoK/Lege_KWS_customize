@@ -154,19 +154,25 @@ def process_audio_files_exclude_prefix(root_dir, dest_dir, prefix='_'):
         print(subdir)
 
 
-if __name__ == '__main__':
-    root_dir = 'dataset/google_origin'
-    dest_dir = 'dataset/google_origin_SPEC'
-    process_audio_files_exclude_prefix(root_dir, dest_dir)
-    
-    # root_dir = 'dataset/google_noisy/NGSCD'
-    # dest_dir = 'dataset/google_noisy/NGSCD_SPEC'
-    # process_audio_files(root_dir, dest_dir)
-    
 # if __name__ == '__main__':
-#     root_dir = 'dataset/google_noisy/NGSCD'
-#     dest_dir = 'dataset/google_noisy/NGSCD_SPEC'
-#     process_audio_files(root_dir, dest_dir)
+#     # root_dir = 'dataset/google_origin'
+#     # dest_dir = 'dataset/google_origin_SPEC'
+
+#     root_dir = 'dataset_lege/lege_origin'
+#     dest_dir = 'dataset_lege/lege_origin_SPEC'
+
+#     process_audio_files_exclude_prefix(root_dir, dest_dir)
+    
+
+    
+if __name__ == '__main__':
+    #   root_dir = 'dataset/google_noisy/NGSCD'
+    #   dest_dir = 'dataset/google_noisy/NGSCD_SPEC'
+
+    root_dir = 'dataset_lege/lege_noisy/NGSCD'
+    dest_dir = 'dataset_lege/lege_noisy/NGSCD_SPEC'
+
+    process_audio_files(root_dir, dest_dir)
 
 
                

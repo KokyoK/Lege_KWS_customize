@@ -19,13 +19,14 @@ import math
 train_noise_count = 8
 valid_noise_count = 8
 test_noise_count = 8
+dataset_folder = "dataset_lege"
 
 # if torch.cuda.is_available():
 #     torch.cuda.set_device(geforce_rtx_3060_xc)
 
 def fetch_speaker_list(ROOT_DIR, WORD_LIST):
     speaker_list = []
-    if ROOT_DIR == "../EarlyExit/dataset/huawei_modify/WAV_new/":
+    if "huawei" in ROOT_DIR:
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if os.path.isdir(os.path.join(ROOT_DIR, available_words[i])):  # 排除.DS_store这种文件
@@ -35,7 +36,8 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                             id = wav_file.split("_", 1)[0]
                             if (id not in speaker_list):
                                 speaker_list.append(id)
-    elif ROOT_DIR == "dataset/lege/":
+    elif "lege" in ROOT_DIR:
+        ROOT_DIR = f"{dataset_folder}/lege_origin/" 
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if os.path.isdir(os.path.join(ROOT_DIR,available_words[i])):    # 排除.DS_store这种文件
@@ -47,8 +49,8 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == "dataset/google_origin/" or ROOT_DIR == "dataset/google_noisy/NGSCD/" or ROOT_DIR == "dataset/google_noisy/NGSCD_SPEC/" :
-        ROOT_DIR = "dataset/google_origin/" 
+    elif ROOT_DIR == f"{dataset_folder}/google_origin/" or ROOT_DIR == f"{dataset_folder}/google_noisy/NGSCD/" or ROOT_DIR == f"{dataset_folder}/google_noisy/NGSCD_SPEC/" :
+        ROOT_DIR = f"{dataset_folder}/google_origin/" 
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if (word in WORD_LIST):
@@ -90,9 +92,9 @@ def merge_noisy_datasets(csv_lists_path):
     test_df = merge_and_add_columns('test', snrs_te)
 
     # Save the new datasets
-    train_df.to_csv(os.path.join('dataset/google_noisy/split', 'train.csv'), index=False)
-    valid_df.to_csv(os.path.join('dataset/google_noisy/split', 'valid.csv'), index=False)
-    test_df.to_csv(os.path.join('dataset/google_noisy/split', 'test.csv'), index=False)
+    train_df.to_csv(os.path.join(f'{dataset_folder}/lege_noisy/split', 'train.csv'), index=False)
+    valid_df.to_csv(os.path.join(f'{dataset_folder}/lege_noisy/split', 'valid.csv'), index=False)
+    test_df.to_csv(os.path.join(f'{dataset_folder}/lege_noisy/split', 'test.csv'), index=False)
 
     return train_df, valid_df, test_df
 
@@ -130,9 +132,9 @@ def read_csv(file_path):
     return chunk_list
 
 def create_csv(root_dir, word_list,speaker_list):
-    train_csv = CsvLogger(filename='dataset/split/train.csv', head=["path","kw","id"])
-    valid_csv = CsvLogger(filename='dataset/split/valid.csv', head=["path","kw","id"])
-    test_csv = CsvLogger(filename='dataset/split/test.csv', head=["path","kw","id"])
+    train_csv = CsvLogger(filename=f'{dataset_folder}/split/train.csv', head=["path","kw","id"])
+    valid_csv = CsvLogger(filename=f'{dataset_folder}/split/valid.csv', head=["path","kw","id"])
+    test_csv = CsvLogger(filename=f'{dataset_folder}/split/test.csv', head=["path","kw","id"])
     
     
     
@@ -411,7 +413,11 @@ class TripletSpeechDataset(data.Dataset):
     def load_data(self, data_element):
         """ Loads audio, shifts data and adds noise. """
         # print(data_element) # ('up/888a0c49_nohash_3.wav', 'up', '888a0c49', '1', '20')
-        datapath_root = "dataset/google_noisy/NGSCD_SPEC/"
+        if dataset_folder == "dataset_lege":
+            dataset_name = "lege"
+        elif dataset_folder == "dataset":
+            dataset_name = "google"
+        datapath_root = f"{dataset_folder}/{dataset_name}_noisy/NGSCD_SPEC/"
         # data_path = self.dataset_type+"/"+ 
         if data_element[4]=='-':
             data_path = f"clean{data_element[3]}"
@@ -419,7 +425,7 @@ class TripletSpeechDataset(data.Dataset):
             data_path = f"N{data_element[3]}_SNR{data_element[4]}"
         data_path = datapath_root + self.dataset_type+"/"+ data_path + "/" +data_element[0].replace("/","_")
 
-        cleanpath_root = "dataset/google_origin_SPEC/"
+        cleanpath_root = f"{dataset_folder}/{dataset_name}_origin_SPEC/"
         clean_path =  cleanpath_root+data_element[0]
         
         # 读取 wav
@@ -454,11 +460,11 @@ class TripletSpeechDataset(data.Dataset):
         out_data = self.transforms(out_data)
         return out_data
         
-def get_loaders( root_dir, word_list,speaker_list):
+def get_loaders( root_dir, word_list,speaker_list,):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
-
-    split_root = "dataset/google_noisy/split/"
+    
+    split_root = f'{root_dir.replace("NGSCD_SPEC/","")}split/'
     
     train_trips = []
     valid_trips = []
@@ -470,6 +476,7 @@ def get_loaders( root_dir, word_list,speaker_list):
     valid_trip = read_csv(split_root+"valid.csv")
     test_trip = read_csv(split_root+"test.csv")
 
+    bs = 32
 
     train_trip_dataset = TripletSpeechDataset(train_trip, "Train", ap, word_list, speaker_list)
     # dev_trip = generate_triplets(dev_data)
@@ -477,33 +484,37 @@ def get_loaders( root_dir, word_list,speaker_list):
     # test_trip = generate_triplets(test_data)
     test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
 
-    train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=32, shuffle=True)
-    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=32, shuffle=True)
-    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=32, shuffle=True)
+    train_trip_loader = data.DataLoader(train_trip_dataset, batch_size=bs, shuffle=True)
+    valid_trip_loader = data.DataLoader(valid_trip_dataset, batch_size=bs, shuffle=True)
+    test_trip_loader = data.DataLoader(test_trip_dataset, batch_size=bs, shuffle=True)
 
     return [train_trip_loader, valid_trip_loader, test_trip_loader]
 
    
 if __name__ == "__main__":
     # Test example
-    # root_dir = "dataset/lege/"
-    # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-    # speaker_list = fetch_speaker_list(root_dir,word_list)
-    # @todo: data preparation
-    root_dir =  "dataset/google_noisy/NGSCD/"
-    word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    dataset_folder = "dataset_lege"
+    root_dir = f"{dataset_folder}/lege_noisy/NGSCD/"
+    word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     speaker_list = fetch_speaker_list(root_dir,word_list)
     print("num speakers: ", len(speaker_list))
     loaders = get_loaders(root_dir, word_list, speaker_list)
-    
-    
-    
-    
-    
-    # # NOTE 生成数据集 list
-    # csv_lists_path = 'dataset/NoisyGSCD/csvLists/'
-    # train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
+    torch.save(loaders,"loaders/loaders_lege.pth")
+    # torch.save(self.state_dict(), "saved_model/" + name)
+    # @todo: data preparation
 
+    # root_dir =  f"{dataset_folder}/google_noisy/NGSCD/"
+    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    # speaker_list = fetch_speaker_list(root_dir,word_list)
+    # print("num speakers: ", len(speaker_list))
+    # loaders = get_loaders(root_dir, word_list, speaker_list)
+    
+    
+
+    
+    # # NOTE 生成数据集 merge后的list
+    # csv_lists_path = 'dataset_lege/NoisyLEGE/csvLists/'
+    # train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
     # print(train_df.head())
     # print(valid_df.head())
     # print(test_df.head())

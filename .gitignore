@@ -10,3 +10,4 @@ input_samples/
 /*.gz
 mamba/__pycache__
 *.pth
+dataset_lege/

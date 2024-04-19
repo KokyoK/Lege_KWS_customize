@@ -221,7 +221,6 @@ def train(model, num_epochs, loaders,args):
 
             optimizer.zero_grad()
 
-
             anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
             # calculate loss

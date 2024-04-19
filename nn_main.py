@@ -19,11 +19,12 @@ parser = argparse.ArgumentParser(description='Keyword spotting')
 # parser.add_argument('--model_name', default="tcresnet8_2", help='model_name\noptions: "mobilev2_2 , tcresnet8_2"')
 # parser.add_argument('--dataset', default="google_kws", help='dataset_name\noptions: "cifar10, "google_kws"')
 
+parser.add_argument('--dataset', default="google",  help='google | lege')
 # parser.add_argument('--device', default="board", help='')
 parser.add_argument('--orth', default="yes", help='')
 parser.add_argument('--denoise', default="yes", help='')
-parser.add_argument('--k', default=1, type=float, help='')
-parser.add_argument('--s', default=1, type=float, help='')
+
+
 
 parser.add_argument('--log', default="logs/record.csv", help='')
 parser.add_argument('--ptname', default="our", help='')
@@ -33,20 +34,24 @@ parser.add_argument('--orth_loss', default="yes", help='')
 parser.add_argument('--backbone', default="res", help='')
 parser.add_argument('--denoise_net', default="unet", help='')
 parser.add_argument('--att', default="yes", help='')
+
 args = parser.parse_args()
 print(args)
 TRAIN = False
 if args.train == "yes":
     TRAIN = True
 # ROOT_DIR = "dataset/google_origin/"
-ROOT_DIR = "dataset/google_noisy/NGSCD_SPEC/"
-WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+if args.dataset == "google":
+    ROOT_DIR = "dataset/google_noisy/NGSCD_SPEC/"
+    WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+elif args.dataset == "lege":
+    ROOT_DIR = "dataset_lege/lege_noisy/NGSCD_SPEC/"
+    WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
 # ROOT_DIR = "../EarlyExit/dataset/huawei_modify/WAV_new/"
 # WORD_LIST = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
 
 # # SPEAKER_LIST = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A")]
-# ROOT_DIR = "dataset/lege/"
-# WORD_LIST = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
+
 SPEAKER_LIST = nd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
 NUM_EPOCH = 200
 
@@ -57,8 +62,8 @@ if __name__ == "__main__":
     model_fp32 = md.SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST),n_speaker=len(SPEAKER_LIST),args=args)
     print("Get models done.")
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    # loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    loaders = torch.load("loaders.pth")
+    loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
+    loaders = torch.load(f"loaders/loaders_{args.dataset}.pth")
     print("Get loaders done.")
     model_fp32.set_args(args)
 

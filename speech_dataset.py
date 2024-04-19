@@ -32,7 +32,7 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                             id = wav_file.split("_", 1)[0]
                             if (id not in speaker_list):
                                 speaker_list.append(id)
-    elif ROOT_DIR == "dataset/lege/":
+    elif ROOT_DIR == "dataset_lege/lege_origin/":
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if os.path.isdir(os.path.join(ROOT_DIR,available_words[i])):    # 排除.DS_store这种文件
@@ -81,7 +81,7 @@ def get_all_data_length(root_dir):          # for debug
 
 
 # 在train_set中的speaker 不会出现在valid_set和test_set里
-def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
+def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.85, 0.05, 0.1]):
     if sum(split_pct) != 1:
         raise ValueError("Split percentages must sum to 1")
     unknown_list = []
@@ -373,7 +373,10 @@ def get_loaders( root_dir, word_list,speaker_list):
     # train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
     # dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
     # test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
-    split_root = "dataset/split/"
+    if root_dir == "dataset/google_origin/":
+        split_root = "dataset/split/"
+    elif root_dir == "dataset_lege/lege_origin/":
+        split_root = "dataset_lege/split/"
     train_trip = read_csv(split_root+"train.csv")
     valid_trip = read_csv(split_root+"valid.csv")
     test_trip = read_csv(split_root+"test.csv")
@@ -406,9 +409,9 @@ class CsvLogger:
 
 
 def create_csv(root_dir, word_list,speaker_list):
-    train_csv = CsvLogger(filename='dataset/split/train.csv', head=["path","kw","id"])
-    valid_csv = CsvLogger(filename='dataset/split/valid.csv', head=["path","kw","id"])
-    test_csv = CsvLogger(filename='dataset/split/test.csv', head=["path","kw","id"])
+    train_csv = CsvLogger(filename='dataset_lege/split/train.csv', head=["path","kw","id"])
+    valid_csv = CsvLogger(filename='dataset_lege/split/valid.csv', head=["path","kw","id"])
+    test_csv = CsvLogger(filename='dataset_lege/split/test.csv', head=["path","kw","id"])
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
     train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
@@ -453,20 +456,20 @@ def read_csv(file_path):
     
 if __name__ == "__main__":
     # Test example
-    # root_dir = "dataset/lege/"
-    # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-    # speaker_list = fetch_speaker_list(root_dir,word_list)
-    # @todo: data preparation
-    root_dir =  "dataset/google_origin/"
-    word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    root_dir = "dataset_lege/lege_origin/"
+    word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     speaker_list = fetch_speaker_list(root_dir,word_list)
+    # @todo: data preparation
+    # root_dir =  "dataset/google_origin/"
+    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    # speaker_list = fetch_speaker_list(root_dir,word_list)
   
     # root_dir = "dataset/huawei_modify/WAV_new/"
     # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
     # speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
 
     
-    # create_csv(root_dir, word_list,speaker_list)
+    create_csv(root_dir, word_list,speaker_list)
     
     # ap = AudioPreprocessor()
     # train, dev, test = split_dataset(root_dir, word_list, speaker_list)
