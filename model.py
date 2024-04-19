@@ -43,10 +43,12 @@ class SiameseTCResNet(nn.Module):
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
         if self.args.denoise_loss == "yes":
-            anchor = self.denoise_net(anchor)
-            pos = self.denoise_net(pos)
-            neg = self.denoise_net(neg)
+            anchor, log_var, mu = self.denoise_net(anchor)
+            pos, log_varp, mup = self.denoise_net(pos)
+            neg, log_varn, mun = self.denoise_net(neg)
         self.denoised_anchor = anchor
+        self.log_var = log_var
+        self.mu = mu
         # 分别处理3个输入
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
         out_k2, out_s2, map_k2, map_s2 = self.network(pos)

@@ -20,6 +20,14 @@ class UNet(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, kernel_size=(1, 3), padding=(0, 1))
         self.conv3 = nn.Conv2d(32, 64, kernel_size=(1, 3), padding=(0, 1))
         self.pool = nn.MaxPool2d((1, 2))
+        self.B1 = nn.BatchNorm2d(16)
+        self.B2 = nn.BatchNorm2d(32)
+
+        self.B3 = nn.BatchNorm2d(64)
+        self.B4 = nn.BatchNorm2d(32)
+        self.B5 = nn.BatchNorm2d(16)
+        self.B6 = nn.BatchNorm2d(16)
+
 
         # 解码器
         self.upconv1 = nn.ConvTranspose2d(64, 32, kernel_size=(1, 2), stride=(1, 2))
@@ -27,28 +35,51 @@ class UNet(nn.Module):
         self.upconv2 = nn.ConvTranspose2d(32, 16, kernel_size=(1, 2), stride=(1, 2), output_padding=(0, 1))
         self.conv5 = nn.Conv2d(32, 16, kernel_size=(1, 3), padding=(0, 1))
         self.conv6 = nn.Conv2d(16, 40, kernel_size=(1, 3), padding=(0, 1))
+        self.fc_mu = nn.Linear(25*64, 128)
+        self.fc_var = nn.Linear(25*64, 128)
+        self.decoder_input = nn.Linear(128, 25*64)
 
         # 激活函数
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU()
+        self.tanh = nn.Tanh()
+
+    def reparameterize(self, mu, logvar):
+        """
+        Reparameterization trick to sample from N(mu, var) from
+        N(0,1).
+        :param mu: (Tensor) Mean of the latent Gaussian [B x D]
+        :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
+        :return: (Tensor) [B x D]
+        """
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps * std + mu
 
     def forward(self, x):
         # 编码器
         c1 = self.relu(self.conv1(x))
-        p1 = self.pool(c1)
+        p1 = self.B1(self.pool(c1))
         c2 = self.relu(self.conv2(p1))
-        p2 = self.pool(c2)
-        c3 = self.relu(self.conv3(p2))
+        p2 = self.B2(self.pool(c2))
+        c3 = self.relu(self.B3(self.conv3(p2)))
+
+        result = torch.flatten(c3, start_dim=1)
+        mu = self.fc_mu(result)
+        log_var = self.fc_var(result)
+        z = self.reparameterize(mu, log_var)
+        z = self.decoder_input(z).reshape(c3.shape[0], c3.shape[1], c3.shape[2], c3.shape[3])
+
 
         # 解码器
-        up1 = self.relu(self.upconv1(c3))
+        up1 = self.relu(self.B4(self.upconv1(z)))
         merge1 = torch.cat([up1, c2], dim=1)
         c4 = self.relu(self.conv4(merge1))
-        up2 = self.relu(self.upconv2(c4))
+        up2 = self.relu(self.B5(self.upconv2(c4)))
         merge2 = torch.cat([up2, c1], dim=1)
         c5 = self.relu(self.conv5(merge2))
-        c6 = self.conv6(c5)
+        c6 = self.tanh(self.conv6(c5))
 
-        return c6
+        return c6, mu, log_var
 
 class ConvBN(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, with_bn=True):
@@ -129,32 +160,32 @@ class StarNet(nn.Module):
         for i in range(len(self.stages)-1):
             stage = self.stages[i]
             x = stage(x)
-        if self.args.att == "yes":
-            share_map_T = x.squeeze(2).permute(1, 0, 2)
-            attn_k, attn_k_weights = self.k_attn(share_map_T, share_map_T, share_map_T)
-            attn_s, attn_s_weights = self.s_attn(share_map_T, share_map_T, share_map_T)
+        # if self.args.att == "yes":
+        #     share_map_T = x.squeeze(2).permute(1, 0, 2)
+        #     attn_k, attn_k_weights = self.k_attn(share_map_T, share_map_T, share_map_T)
+        #     attn_s, attn_s_weights = self.s_attn(share_map_T, share_map_T, share_map_T)
             
-            attn_k = attn_k.squeeze(-1).permute(1,0,2) # 移除最后一个维度
-            attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
+        #     attn_k = attn_k.squeeze(-1).permute(1,0,2) # 移除最后一个维度
+        #     attn_s = attn_s.squeeze(-1).permute(1,0,2) # 同理
             
-            k_map_T = x.squeeze(2).permute(1, 0, 2)    
-            s_map_T = x.squeeze(2).permute(1, 0, 2)    
+        #     k_map_T = x.squeeze(2).permute(1, 0, 2)    
+        #     s_map_T = x.squeeze(2).permute(1, 0, 2)    
             
-            attn_k, attn_k_weights = self.k_attn(k_map_T, k_map_T, k_map_T)
-            attn_s, attn_s_weights = self.s_attn(s_map_T, s_map_T, s_map_T)
+        #     attn_k, attn_k_weights = self.k_attn(k_map_T, k_map_T, k_map_T)
+        #     attn_s, attn_s_weights = self.s_attn(s_map_T, s_map_T, s_map_T)
             
-            k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
-            s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
+        #     k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
+        #     s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
         
         k_map = self.k_block(x)
         s_map = self.s_block(x)
-        if self.args.orth_loss == "yes":     
-            kk = self.w_kk @ k_map.T
-            ks = self.w_ks @ k_map.T
-            ss = self.w_ss @ s_map.T
-            sk = self.w_sk @ s_map.T
-            k_map = kk.T
-            s_map = ss.T
+        # if self.args.orth_loss == "yes":     
+        #     kk = self.w_kk @ k_map.T
+        #     ks = self.w_ks @ k_map.T
+        #     ss = self.w_ss @ s_map.T
+        #     sk = self.w_sk @ s_map.T
+        #     k_map = kk.T
+        #     s_map = ss.T
         
 
         k_map = torch.flatten(self.avgpool(self.norm(k_map)), 1)

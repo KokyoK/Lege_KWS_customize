@@ -225,7 +225,8 @@ def train(model, num_epochs, loaders,args):
             anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
             # calculate loss
-            loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean)
+            kld_loss = torch.mean(-0.5 * torch.sum(1 + model.log_var - model.mu ** 2 - model.log_var.exp(), dim = 1), dim = 0)
+            loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean) + 0.1*kld_loss
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
             loss_orth = criterion_orth(model.network)
