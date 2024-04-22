@@ -121,8 +121,8 @@ class OrgLoss(nn.Module):
         # loss = torch.Tensor([0])
         # if train_on_gpu:
         #     loss.to(device)
-        loss_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.w_ss, net.w_sk), dtype=torch.float32).view(1, 1)))
-        loss_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.w_ss, net.w_sk), dtype=torch.float32).view(1, 1)))
+        loss_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.w_ss,net.orth_block.w_sk), dtype=torch.float32).view(1, 1)))
+        loss_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.w_ss, net.orth_block.w_sk), dtype=torch.float32).view(1, 1)))
         return loss_k + loss_s
 
         # return o_loss * 5
@@ -224,7 +224,10 @@ def train(model, num_epochs, loaders,args):
             anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(anchor_data, positive_data, negative_data)
 
             # calculate loss
-            kld_loss = torch.mean(-0.5 * torch.sum(1 + model.log_var - model.mu ** 2 - model.log_var.exp(), dim = 1), dim = 0)
+            if args.denoise_loss == "yes":
+                kld_loss = torch.mean(-0.5 * torch.sum(1 + model.log_var - model.mu ** 2 - model.log_var.exp(), dim = 1), dim = 0)
+            else:
+                kld_loss = 0
             loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean) + 0.1*kld_loss
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
@@ -288,8 +291,8 @@ def train(model, num_epochs, loaders,args):
                 loss_denoise = criterion_noise(anchor_clean, model.denoised_anchor)
                 loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
                 loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-                # loss_orth = criterion_orth(model.network)
-                loss_orth = loss_speaker
+                loss_orth = criterion_orth(model.network)
+                # loss_orth = loss_speaker
                 loss = loss_kws + loss_speaker + loss_orth
 
                 total_valid_loss += loss.item()

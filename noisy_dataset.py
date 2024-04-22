@@ -19,7 +19,7 @@ import math
 train_noise_count = 8
 valid_noise_count = 8
 test_noise_count = 8
-dataset_folder = "dataset_lege"
+dataset_folder = "dataset"
 
 # if torch.cuda.is_available():
 #     torch.cuda.set_device(geforce_rtx_3060_xc)
@@ -37,7 +37,7 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                             if (id not in speaker_list):
                                 speaker_list.append(id)
     elif "lege" in ROOT_DIR:
-        ROOT_DIR = f"{dataset_folder}/lege_origin/" 
+        ROOT_DIR = "dataset_lege/lege_origin/" 
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
             if os.path.isdir(os.path.join(ROOT_DIR,available_words[i])):    # 排除.DS_store这种文件

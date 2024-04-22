@@ -11,33 +11,57 @@ from ptflops import get_model_complexity_info
 import copy
 
 torch.manual_seed(42)
+
+class OrthBlock(nn.Module):
+    def __init__(self, feature_dim):
+        super(OrthBlock, self).__init__()
+        self.d = feature_dim
+        self.w_kk = nn.Parameter(torch.randn(self.d, self.d))
+        self.w_ks = nn.Parameter(torch.randn(self.d, self.d))
+        self.w_ss = nn.Parameter(torch.randn(self.d, self.d))
+        self.w_sk = nn.Parameter(torch.randn(self.d, self.d))
+        self.w_s_dis = nn.Parameter(torch.randn(self.d, self.d))
+        self.w_k_dis = nn.Parameter(torch.randn(self.d, self.d))
+
+    def forward(self, k_map, s_map):
+        k_map = k_map.squeeze(2,3)
+        s_map = s_map.squeeze(2,3)
+        kk = self.w_kk @ k_map.T
+        ks = self.w_ks @ k_map.T
+        ss = self.w_ss @ s_map.T
+        sk = self.w_sk @ s_map.T
+        k_map_transformed = kk.T.unsqueeze(2).unsqueeze(3)
+        s_map_transformed = ss.T.unsqueeze(2).unsqueeze(3)
+        return k_map_transformed, s_map_transformed
+
+
 class UNet(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
 
         # 编码器
-        self.conv1 = nn.Conv2d(40, 16, kernel_size=(1, 3), padding=(0, 1))
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=(1, 3), padding=(0, 1))
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=(1, 3), padding=(0, 1))
+        self.conv1 = nn.Conv2d(40, 24, kernel_size=(1, 3), padding=(0, 1))
+        self.conv2 = nn.Conv2d(24, 48, kernel_size=(1, 3), padding=(0, 1))
+        self.conv3 = nn.Conv2d(48, 96, kernel_size=(1, 3), padding=(0, 1))
         self.pool = nn.MaxPool2d((1, 2))
-        self.B1 = nn.BatchNorm2d(16)
-        self.B2 = nn.BatchNorm2d(32)
+        self.B1 = nn.BatchNorm2d(24)
+        self.B2 = nn.BatchNorm2d(48)
 
-        self.B3 = nn.BatchNorm2d(64)
-        self.B4 = nn.BatchNorm2d(32)
-        self.B5 = nn.BatchNorm2d(16)
-        self.B6 = nn.BatchNorm2d(16)
+        self.B3 = nn.BatchNorm2d(96)
+        self.B4 = nn.BatchNorm2d(48)
+        self.B5 = nn.BatchNorm2d(24)
+        self.B6 = nn.BatchNorm2d(24)
 
 
         # 解码器
-        self.upconv1 = nn.ConvTranspose2d(64, 32, kernel_size=(1, 2), stride=(1, 2))
-        self.conv4 = nn.Conv2d(64, 32, kernel_size=(1, 3), padding=(0, 1))
-        self.upconv2 = nn.ConvTranspose2d(32, 16, kernel_size=(1, 2), stride=(1, 2), output_padding=(0, 1))
-        self.conv5 = nn.Conv2d(32, 16, kernel_size=(1, 3), padding=(0, 1))
-        self.conv6 = nn.Conv2d(16, 40, kernel_size=(1, 3), padding=(0, 1))
-        self.fc_mu = nn.Linear(25*64, 128)
-        self.fc_var = nn.Linear(25*64, 128)
-        self.decoder_input = nn.Linear(128, 25*64)
+        self.upconv1 = nn.ConvTranspose2d(96, 48, kernel_size=(1, 2), stride=(1, 2))
+        self.conv4 = nn.Conv2d(96, 48, kernel_size=(1, 3), padding=(0, 1))
+        self.upconv2 = nn.ConvTranspose2d(48, 24, kernel_size=(1, 2), stride=(1, 2), output_padding=(0, 1))
+        self.conv5 = nn.Conv2d(48, 24, kernel_size=(1, 3), padding=(0, 1))
+        self.conv6 = nn.Conv2d(24, 40, kernel_size=(1, 3), padding=(0, 1))
+        self.fc_mu = nn.Linear(25*96, 128)
+        self.fc_var = nn.Linear(25*96, 128)
+        self.decoder_input = nn.Linear(128, 25*96)
 
         # 激活函数
         self.relu = nn.LeakyReLU()
@@ -116,7 +140,7 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, 1,1], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, args=None):
+    def __init__(self, base_dim=16, depths=[1, 1, ], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, args=None):
         super().__init__()
         self.args = args
         self.num_classes = num_classes
@@ -143,15 +167,7 @@ class StarNet(nn.Module):
         self.head_k = nn.Linear(self.in_channel, num_classes)
         self.head_s = nn.Linear(self.in_channel, n_speaker)
         
-        self.d = 128  # feature数
-        self.w_kk = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_ks = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_ss = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_sk = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
+        self.orth_block = OrthBlock(feature_dim=32)
         # self.apply(self._init_weights)
         self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
         self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
@@ -176,22 +192,18 @@ class StarNet(nn.Module):
             
         #     k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
         #     s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
-        
+
         k_map = self.k_block(x)
         s_map = self.s_block(x)
-        # if self.args.orth_loss == "yes":     
-        #     kk = self.w_kk @ k_map.T
-        #     ks = self.w_ks @ k_map.T
-        #     ss = self.w_ss @ s_map.T
-        #     sk = self.w_sk @ s_map.T
-        #     k_map = kk.T
-        #     s_map = ss.T
-        
-
-        k_map = torch.flatten(self.avgpool(self.norm(k_map)), 1)
-        s_map = torch.flatten(self.avgpool(self.norm(s_map)), 1)
 
 
+        k_map = self.avgpool(self.norm(k_map))
+        s_map = self.avgpool(self.norm(s_map))
+        if self.args.orth_loss == "yes":     
+            k_map, s_map = self.orth_block(k_map, s_map)
+        k_map = k_map.squeeze(2,3)
+        s_map = s_map.squeeze(2,3)
+        # print(k_map.shape)
         out_k = self.head_k(k_map)
         out_s = self.head_s(s_map)
         return out_k, out_s, k_map, s_map

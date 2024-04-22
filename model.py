@@ -9,6 +9,8 @@ import unet
 import time
 from mamba import simple_mamba
 from ptflops import get_model_complexity_info
+from argparse import Namespace
+from unet import OrthBlock
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -29,7 +31,7 @@ class SiameseTCResNet(nn.Module):
         if args.backbone =="res":
             self.network = TCResNet8(k, n_mels, n_classes, n_speaker,args)
         else:
-            self.network = unet.StarNet(args=args)
+            self.network = unet.StarNet(args=args,n_speaker = n_speaker)
         # self.network = unet.StarNet()
         if args.denoise_net == "mamba":
             self.denoise_net = simple_mamba.Mamba()
@@ -46,10 +48,10 @@ class SiameseTCResNet(nn.Module):
             anchor, log_var, mu = self.denoise_net(anchor)
             pos, log_varp, mup = self.denoise_net(pos)
             neg, log_varn, mun = self.denoise_net(neg)
-        self.denoised_anchor = anchor
-        self.log_var = log_var
-        self.mu = mu
+            self.log_var = log_var
+            self.mu = mu
         # 分别处理3个输入
+        self.denoised_anchor = anchor
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
         out_k2, out_s2, map_k2, map_s2 = self.network(pos)
         out_k3, out_s3, map_k3, map_s3 = self.network(neg)
@@ -108,6 +110,7 @@ class S2_Block(nn.Module):
         return out
 
 
+
 class TCResNet8(nn.Module):
     """ TC-ResNet8 using Depth-wise and Point-wise Convolution """
 
@@ -135,25 +138,7 @@ class TCResNet8(nn.Module):
         self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=True)
 
         # Parameters for orthogonal loss
-        self.d = 48  # feature数
-        # self.share_para = nn.Parameter(torch.randn(
-        #     self.d, self.d), requires_grad=True)
-        # self.kws_para = nn.Parameter(torch.randn(
-        #     self.d, self.d), requires_grad=True)
-        # self.speaker_para = nn.Parameter(torch.randn(
-        #     self.d, self.d), requires_grad=True)
-        self.w_kk = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_ks = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_ss = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_sk = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_s_dis = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
-        self.w_k_dis = nn.Parameter(torch.randn(
-            self.d, self.d), requires_grad=True)
+        self.orth_block = OrthBlock(feature_dim=48)
         # self.conv_ks = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
         #                                padding=(1, 1), bias=True)
         # self.conv_sk = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
@@ -185,8 +170,8 @@ class TCResNet8(nn.Module):
         s_map = self.s2_block2_speaker(share_map)
         # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
 
-        k_map = self.avg_pool(k_map).squeeze(2,3)
-        s_map = self.avg_pool(s_map).squeeze(2,3)
+        k_map = self.avg_pool(k_map)
+        s_map = self.avg_pool(s_map)
         # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
         # baseline 
         # k_map = k_map.unsqueeze(2).unsqueeze(3)
@@ -201,15 +186,8 @@ class TCResNet8(nn.Module):
         
         # better
         if self.args.orth_loss == "yes":       
-            kk = self.w_kk @ k_map.T
-            ks = self.w_ks @ k_map.T
-            ss = self.w_ss @ s_map.T
-            sk = self.w_sk @ s_map.T
-            k_map = kk.T.unsqueeze(2).unsqueeze(3)
-            s_map = ss.T.unsqueeze(2).unsqueeze(3)
-        else:
-            k_map = k_map.unsqueeze(2).unsqueeze(3)
-            s_map = s_map.unsqueeze(2).unsqueeze(3)
+            k_map, s_map = self.orth_block(k_map, s_map)
+
 
         
         # print(k_map.shape)
@@ -295,13 +273,14 @@ if __name__ == "__main__":
     ROOT_DIR = "dataset/google_noisy/NGSCD/"
     WORD_LIST = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
     SPEAKER_LIST = nsd.fetch_speaker_list(ROOT_DIR, WORD_LIST)
-    print("num speaker: ", len(SPEAKER_LIST))
+    # print("num speaker: ", len(SPEAKER_LIST))
     x = torch.rand(1, 40, 1, 101)
-    model_fp32 = SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
-    out = model_fp32(x,x,x)
+    # model_fp32 = SiameseTCResNet(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST),args = None)
+    # out = model_fp32(x,x,x)
     
+    args = Namespace(dataset='google', orth='yes', denoise='yes', log='logs/record_star_o_u1.csv', ptname='our', train='yes', denoise_loss='yes', orth_loss='yes', backbone='star', denoise_net='unet', att='no')
    
-    tcres = TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST))
+    tcres = TCResNet8(k=1, n_mels=40, n_classes=len(WORD_LIST), n_speaker=len(SPEAKER_LIST),args = args)
     macs, params = thop.profile(tcres,inputs=(x,))
     print(f"macs {macs}, params {params}")
     
