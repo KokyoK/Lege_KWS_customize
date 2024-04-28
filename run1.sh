@@ -7,7 +7,7 @@
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/record_star_o_u_att1.csv --denoise_loss yes --orth_loss yes --att yes --backbone star> logs/noisy/star_o_u_att1.py 2>&1 &
 
 # google
-CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/my_star_o_u2.csv --denoise_loss yes --orth_loss yes --att no --backbone star> logs/noisy/star_o_u.py 2>&1 &
+CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/my_star_o_u.csv --denoise_loss yes --orth_loss yes --att no --backbone star --ptname my> logs/noisy/star_o_u.py 2>&1 &
 # CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/record_star_u2.csv --denoise_loss yes --orth_loss no --att no --backbone star> logs/noisy/star_u2.py 2>&1 &
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/record_star_o2.csv --denoise_loss no --orth_loss yes --att no --backbone star> logs/noisy/star_o2.py 2>&1 &
 

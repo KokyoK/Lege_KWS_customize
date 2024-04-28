@@ -20,18 +20,21 @@ class OrthBlock(nn.Module):
         self.w_ks = nn.Parameter(torch.randn(self.d, self.d))
         self.w_ss = nn.Parameter(torch.randn(self.d, self.d))
         self.w_sk = nn.Parameter(torch.randn(self.d, self.d))
-        self.w_s_dis = nn.Parameter(torch.randn(self.d, self.d))
-        self.w_k_dis = nn.Parameter(torch.randn(self.d, self.d))
-
+        # self.w_s_dis = nn.Parameter(torch.randn(self.d, self.d))
+        # self.w_k_dis = nn.Parameter(torch.randn(self.d, self.d))
+        self.kk = None
+        self.ks = None
+        self.ss = None
+        self.sk = None
     def forward(self, k_map, s_map):
         k_map = k_map.squeeze(2,3)
         s_map = s_map.squeeze(2,3)
-        kk = self.w_kk @ k_map.T
-        ks = self.w_ks @ k_map.T
-        ss = self.w_ss @ s_map.T
-        sk = self.w_sk @ s_map.T
-        k_map_transformed = kk.T.unsqueeze(2).unsqueeze(3)
-        s_map_transformed = ss.T.unsqueeze(2).unsqueeze(3)
+        self.kk = self.w_kk @ k_map.T
+        self.ks = self.w_ks @ k_map.T
+        self.ss = self.w_ss @ s_map.T
+        self.sk = self.w_sk @ s_map.T
+        k_map_transformed = self.kk.T.unsqueeze(2).unsqueeze(3)
+        s_map_transformed = self.ss.T.unsqueeze(2).unsqueeze(3)
         return k_map_transformed, s_map_transformed
 
 
@@ -120,7 +123,7 @@ class ConvBN(nn.Module):
         return x
               
 class Block(nn.Module):
-    def __init__(self, dim, mlp_ratio=2, drop_path=0.):
+    def __init__(self, dim, mlp_ratio=2, drop_path=0):
         super().__init__()
         self.dwconv = ConvBN(dim, dim, [1, 7], 1, (0, 3), groups=dim, with_bn=True)
         self.f1 = ConvBN(dim, mlp_ratio * dim, 1, with_bn=False)

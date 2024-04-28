@@ -63,7 +63,8 @@ if __name__ == "__main__":
     print("Get models done.")
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     # loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    loaders = torch.load(f"loaders/loaders_{args.dataset}.pth")
+    # torch.save(loaders,"loaders_google_align.pth")
+    loaders = torch.load(f"loaders/loaders_{args.dataset}_align.pth")
     print("Get loaders done.")
     model_fp32.set_args(args)
 
@@ -73,8 +74,9 @@ if __name__ == "__main__":
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        model_fp32.load("google_noisy/our_41_kwsacc_78.32_idloss_0.3318")
+        model_fp32.load("google_noisy/my_32_kwsacc_82.09_idloss_0.2455")
         util.evaluate_testset(model_fp32, loaders[2],args)
+        util.evaluate_testset_all(model_fp32, loaders[2],args)
         
 
 

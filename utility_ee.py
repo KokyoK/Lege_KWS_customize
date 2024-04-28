@@ -7,7 +7,7 @@ import speech_dataset as sd
 import model as md
 import csv
 import log_helper
-
+import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_curve
 
@@ -54,7 +54,7 @@ def calculate_snr(clean_spectrogram, noisy_spectrogram):
 
     return snr
 
-def evaluate_testset(model, test_dataloader,args):
+def evaluate_testset_all(model, test_dataloader,args):
     model.eval()  # Set the model to evaluation mode
     all_scores = []
     all_labels = []
@@ -103,8 +103,100 @@ def evaluate_testset(model, test_dataloader,args):
     print(f"FRR at 10%: {frr_at_10*100:.4f}% FAR, Threshold at 10% FAR: {threshold_at_10:.4f}",)
     print("EER: {:.4f} % at threshold {:.4f}".format(EER*100, eer_threshold))
 
-# Example usage:
-# evaluate_testset(your_model, test_dataloader)
+def evaluate_testset(model, test_dataloader, args):
+    model.eval()  # Set the model to evaluation mode
+    noise_stats = {
+        'clean': {'kw':[],'scores': [], 'labels': []},
+        'seen': {},
+        'unseen': {}
+    }
+
+    with torch.no_grad():
+        for batch_idx, (anchor_batch, positive_batch, negative_batch) in enumerate(test_dataloader):
+            anchor_data, anchor_clean, [anchor_kws_label, anchor_speaker_label, noise_type, noise_snr] = anchor_batch
+            positive_data, _, _ = positive_batch
+            negative_data, _, _ = negative_batch
+
+            anchor_out_kws, anchor_out_speaker, positive_out_speaker, negative_out_speaker = model(
+                anchor_data, positive_data, negative_data)
+
+            scores, labels = calculate_similarity_and_metrics(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
+            correct_kws = (torch.argmax(anchor_out_kws, dim=1) == anchor_kws_label).int()
+
+      
+            # Categorize and collect data
+            for i in range(len(correct_kws)):
+                snr = noise_snr[i]
+                n_type = noise_type[i]
+                correct = correct_kws[i]
+                score = [scores[2*i],scores[2*i+1]]
+                label = [labels[2*i],labels[2*i+1]]
+                # for snr, n_type, correct, score, label in zip(noise_snr, noise_type, correct_kws, scores, labels):
+                if snr == '-':
+                    category = 'clean'
+                    if category not in noise_stats:
+                        noise_stats[category] = {'kw':[],'scores': [], 'labels': []}
+                    noise_stats[category]['scores'].extend(score)
+                    noise_stats[category]['labels'].extend(label)
+                    noise_stats[category]['kw'].append(correct)
+                    
+                else:
+                    if 1 <= int(n_type) <= 6:
+                        category = 'seen'
+                    elif 7 <= int(n_type) <= 8:
+                        category = 'unseen'
+                    else:
+                        continue
+                    if snr not in noise_stats[category]:
+                        noise_stats[category][snr] = {'kw':[],'scores': [], 'labels': []}
+                    noise_stats[category][snr]['scores'].extend(score)
+                    noise_stats[category][snr]['labels'].extend(label)
+                    noise_stats[category][snr]['kw'].append(correct)
+    # print(len(noise_stats['clean']['scores']),
+    #             len(noise_stats['clean']['labels']),
+    #             len(noise_stats['clean']['kw']))
+    # Process data and compute metrics
+    results = []
+    snr_order= ["-","20","15","10","5","0","-5","-10"]
+    for category, data in noise_stats.items():
+        if category == 'clean':
+            accuracy_kws = sum(data['kw']) / len(data['kw']) * 100
+            print(data['labels'][0:10], data['scores'][0:10])
+            fpr, tpr, thresholds = roc_curve(data['labels'], data['scores'])
+            fnr = 1 - tpr
+            eer_idx = np.nanargmin(np.abs(fnr - fpr))
+            eer = fpr[eer_idx] * 100
+            results.append({
+                'Category': 'Clean',
+                'SNR': '-',
+                'Keyword Accuracy (%)': accuracy_kws,
+                'EER (%)': eer
+            })
+        else:
+            for snr in snr_order[1:]:
+                stats = data[snr]
+                accuracy_kws = sum(stats['kw']) / len(stats['kw']) * 100
+                fpr, tpr, thresholds = roc_curve(stats['labels'], stats['scores'])
+                fnr = 1 - tpr
+                eer_idx = np.nanargmin(np.abs(fnr - fpr))
+                eer = fpr[eer_idx] * 100
+                results.append({
+                    'Category': category.capitalize(),
+                    'SNR': snr,
+                    'Keyword Accuracy (%)': accuracy_kws,
+                    'EER (%)': eer
+                })
+
+    # Save results
+    df = pd.DataFrame(results)
+    df.to_csv('snr_noise_performance.csv', index=False)
+    print("Results saved to 'snr_noise_performance.csv'")
+
+    # Print results for debugging
+    for result in results:
+        print(f"Category: {result['Category']} SNR: {result['SNR']} - Keyword Accuracy: {result['Keyword Accuracy (%)']}, EER: {result['EER (%)']:.2f}%")
+
+    return df
 
 class OrgLoss(nn.Module):
     def __init__(self):
@@ -121,9 +213,15 @@ class OrgLoss(nn.Module):
         # loss = torch.Tensor([0])
         # if train_on_gpu:
         #     loss.to(device)
-        loss_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.w_ss,net.orth_block.w_sk), dtype=torch.float32).view(1, 1)))
-        loss_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.w_ss, net.orth_block.w_sk), dtype=torch.float32).view(1, 1)))
-        return loss_k + loss_s
+        loss_k = torch.norm(torch.matmul(net.orth_block.w_ss.T, net.orth_block.w_sk), p='fro') **2
+        loss_s = torch.norm(torch.matmul(net.orth_block.w_ks.T, net.orth_block.w_kk), p='fro') **2
+        
+
+        loss_inner_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ks,net.orth_block.kk), dtype=torch.float32).view(1, 1))) / net.orth_block.w_ss.numel()
+        loss_inner_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ss, net.orth_block.sk), dtype=torch.float32).view(1, 1)))/ net.orth_block.w_ss.numel()
+        # return loss_k + loss_s + loss_inner_k + loss_inner_s
+        # return loss_inner_k + loss_inner_s  #orth
+        return loss_k + loss_s      # cov 
 
         # return o_loss * 5
 class MSELoss(nn.Module):
@@ -237,7 +335,8 @@ def train(model, num_epochs, loaders,args):
             if args.denoise_loss =="yes":
                 loss += 0.1*loss_denoise 
             if args.orth_loss == "yes":
-                loss += loss_orth
+                # loss += loss_orth
+                loss = loss
             
             # loss_denoise.backward(retain_graph=True)
             loss.backward()
@@ -346,7 +445,7 @@ def train(model, num_epochs, loaders,args):
                         f"{frr_at_10*100:.4f}"
                                   ]))
         speaker_loss = total_valid_loss_speaker / len(dev_dataloader)
-        if (speaker_loss < prev_speaker_loss ):
+        if (speaker_loss < prev_speaker_loss or valid_accuracy > prev_kws_acc):
             model.save(name=f"google_noisy/{args.ptname}_{epoch+1}_kwsacc_{valid_accuracy:.2f}_idloss_{speaker_loss:.4f}")
             prev_kws_acc = valid_accuracy
             prev_speaker_loss = speaker_loss
