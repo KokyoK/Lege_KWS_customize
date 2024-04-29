@@ -70,12 +70,13 @@ if __name__ == "__main__":
 
     if TRAIN :
         # model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
+        model_fp32.load("google_noisy/my_30_kwsacc_82.55_idloss_0.2062")
         util.train(model_fp32, NUM_EPOCH,loaders,args)
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        model_fp32.load("google_noisy/bc_base_199_kwsacc_82.86_idloss_0.4171")
-        # model_fp32.load("google_noisy/my_32_kwsacc_82.09_idloss_0.2455")
+        # model_fp32.load("google_noisy/my_30_kwsacc_83.07_idloss_0.1938")
+        model_fp32.load("google_noisy/tc_35_kwsacc_76.16_idloss_0.4820")
         util.evaluate_testset(model_fp32, loaders[2],args)
         util.evaluate_testset_all(model_fp32, loaders[2],args)
         
