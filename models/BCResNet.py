@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 import torch.nn as nn
-
+from unet import OrthBlock
 
 class SubSpectralNorm(nn.Module):
     def __init__(self, C, S, eps=1e-5):
@@ -124,7 +124,9 @@ class TransitionBlock(nn.Module):
 
 
 class BCResNet(torch.nn.Module):
-    def __init__(self):
+    def __init__(self,n_classes, n_speaker,args):
+        self.args = args
+        
         super(BCResNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, 5, stride=(2, 1), padding=(2, 2))
         self.block1_1 = TransitionBlock(16, 8)
@@ -142,53 +144,71 @@ class BCResNet(torch.nn.Module):
         self.block4_2 = BroadcastedBlock(20, dilation=(1, 8), temp_pad=(0, 8))
         self.block4_3 = BroadcastedBlock(20, dilation=(1, 8), temp_pad=(0, 8))
         self.block4_4 = BroadcastedBlock(20, dilation=(1, 8), temp_pad=(0, 8))
-
+        
+        self.orth_block = OrthBlock(feature_dim=32)
+        self.avg_pool = nn.AvgPool2d(kernel_size=(1, 101), stride=1)
+        
+        
         self.conv2 = nn.Conv2d(20, 20, 5, groups=20, padding=(0, 2))
         self.conv3 = nn.Conv2d(20, 32, 1, bias=False)
-        self.conv4 = nn.Conv2d(32, 12, 1, bias=False)
+        self.conv4 = nn.Conv2d(32, n_classes, 1, bias=False)
+        
+        self.conv2_s = nn.Conv2d(20, 20, 5, groups=20, padding=(0, 2))
+        self.conv3_s = nn.Conv2d(20, 32, 1, bias=False)
+        self.conv4_s = nn.Conv2d(32, n_speaker, 1, bias=False)
 
     def forward(self, x):
         x = x .permute(0,2,1,3)
-        print('INPUT SHAPE:', x.shape)
+        # print('INPUT SHAPE:', x.shape)
         out = self.conv1(x)
 
-        print('BLOCK1 INPUT SHAPE:', out.shape)
+        # print('BLOCK1 INPUT SHAPE:', out.shape)
         out = self.block1_1(out)
         out = self.block1_2(out)
 
-        print('BLOCK2 INPUT SHAPE:', out.shape)
+        # print('BLOCK2 INPUT SHAPE:', out.shape)
         out = self.block2_1(out)
         out = self.block2_2(out)
 
-        print('BLOCK3 INPUT SHAPE:', out.shape)
+        # print('BLOCK3 INPUT SHAPE:', out.shape)
         out = self.block3_1(out)
         out = self.block3_2(out)
         out = self.block3_3(out)
         out = self.block3_4(out)
 
-        print('BLOCK4 INPUT SHAPE:', out.shape)
+        # print('BLOCK4 INPUT SHAPE:', out.shape)
         out = self.block4_1(out)
         out = self.block4_2(out)
         out = self.block4_3(out)
-        out = self.block4_4(out)
+        share = self.block4_4(out)
 
-        print('Conv2 INPUT SHAPE:', out.shape)
-        out = self.conv2(out)
 
-        print('Conv3 INPUT SHAPE:', out.shape)
-        out = self.conv3(out)
-        out = out.mean(-1, keepdim=True)
+        out_k = self.conv2(share)
+        k_map = self.conv3(out_k)
 
-        print('Conv4 INPUT SHAPE:', out.shape)
-        out = self.conv4(out)
+        out_s = self.conv2(share)
+        s_map = self.conv3(out_s)
+        
+        
+        k_map = k_map.mean(-1, keepdim=True)
+        s_map = s_map.mean(-1, keepdim=True)
+        if self.args.orth_loss == "yes":       
+            k_map, s_map = self.orth_block(k_map, s_map)
 
-        print('OUTPUT SHAPE:', out.shape)
-        return out
+        out_k = self.conv4(k_map).squeeze(2,3)
+
+
+        out_s = self.conv4(s_map).squeeze(2,3)
+
+
+        # print('OUTPUT SHAPE:', out.shape)
+        return out_k, out_s, k_map, s_map
 
 
 if __name__ == "__main__":
     # x = torch.ones(5, 1, 40, 128)
     x = torch.ones(1, 40, 1, 101)
     bcresnet = BCResNet()
-    _ = bcresnet(x)
-    print('num parameters:', sum(p.numel() for p in bcresnet.parameters() if p.requires_grad))
+    out = bcresnet(x)
+    print(out.shape)
+    # print('num parameters:', sum(p.numel() for p in bcresnet.parameters() if p.requires_grad))

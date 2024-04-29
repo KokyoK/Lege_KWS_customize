@@ -288,11 +288,11 @@ def train(model, num_epochs, loaders,args):
     criterion_noise = DenoiseLoss()
 
 
-    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=0)
-    optimizer = torch.optim.Adam([
-        {'params': model.network.parameters(), 'lr': 1e-4}, 
-        {'params': model.denoise_net.parameters(), 'lr': 1e-3}    
-    ])
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
+    # optimizer = torch.optim.Adam([
+    #     {'params': model.network.parameters(), 'lr': 1e-3}, 
+    #     {'params': model.denoise_net.parameters(), 'lr': 1e-3}    
+    # ])
     prev_kws_acc = 0
     prev_speaker_loss = 999
     prev_EER = 100
@@ -329,14 +329,16 @@ def train(model, num_epochs, loaders,args):
             loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean) + 0.1*kld_loss
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-            loss_orth = criterion_orth(model.network)
-            # loss_orth = loss_speaker
-            loss =  loss_kws + loss_speaker
+
+            loss_orth = loss_speaker
+            loss =  loss_kws + 2*loss_speaker
+            # loss =  loss_kws 
             if args.denoise_loss =="yes":
                 loss += 0.1*loss_denoise 
             if args.orth_loss == "yes":
-                # loss += loss_orth
-                loss = loss
+                loss_orth = criterion_orth(model.network)
+                loss += loss_orth
+
             
             # loss_denoise.backward(retain_graph=True)
             loss.backward()
@@ -390,7 +392,7 @@ def train(model, num_epochs, loaders,args):
                 loss_denoise = criterion_noise(anchor_clean, model.denoised_anchor)
                 loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
                 loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
-                loss_orth = criterion_orth(model.network)
+                loss_orth = loss_speaker
                 # loss_orth = loss_speaker
                 loss = loss_kws + loss_speaker + loss_orth
 

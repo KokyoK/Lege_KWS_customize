@@ -11,6 +11,7 @@ from mamba import simple_mamba
 from ptflops import get_model_complexity_info
 from argparse import Namespace
 from unet import OrthBlock
+from models.BCResNet import BCResNet
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -30,6 +31,8 @@ class SiameseTCResNet(nn.Module):
         # 使用TCResNet8作为子网络
         if args.backbone =="res":
             self.network = TCResNet8(k, n_mels, n_classes, n_speaker,args)
+        elif args.backbone == "bc":
+            self.network = BCResNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
         else:
             self.network = unet.StarNet(args=args,n_speaker = n_speaker)
         # self.network = unet.StarNet()
@@ -147,7 +150,7 @@ class TCResNet8(nn.Module):
         self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
-        self.test = nn.Linear(48,48)
+
 
     def forward(self, x):
         # First depth-wise and point-wise convolution

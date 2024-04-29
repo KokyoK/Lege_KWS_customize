@@ -74,7 +74,8 @@ if __name__ == "__main__":
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        model_fp32.load("google_noisy/my_32_kwsacc_82.09_idloss_0.2455")
+        model_fp32.load("google_noisy/bc_base_199_kwsacc_82.86_idloss_0.4171")
+        # model_fp32.load("google_noisy/my_32_kwsacc_82.09_idloss_0.2455")
         util.evaluate_testset(model_fp32, loaders[2],args)
         util.evaluate_testset_all(model_fp32, loaders[2],args)
         
