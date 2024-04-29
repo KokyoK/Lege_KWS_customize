@@ -44,7 +44,8 @@ def process_audio_files(root_dir, dest_dir):
             if file.endswith('.wav'):  # 假设语音文件是WAV格式
                 audio_path = os.path.join(subdir, file)
                 wav_data = torchaudio.load(audio_path)[0]
-                wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
+                
+                # wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
                 data_len = 16000
                 out_data = wav_data
                 # Pad smaller audio files with zeros to reach 1 second (16_000 samples)
@@ -99,7 +100,7 @@ def process_audio_files(root_dir, dest_dir):
                 audio_path = os.path.join(subdir, file)
                 rel_path = os.path.relpath(audio_path, root_dir)  # 相对路径
                 wav_data = torchaudio.load(audio_path)[0]
-                wav_data = F_audio.resample(wav_data, 16000, 8000)  # 假设将采样率从16000降低到8000
+                # wav_data = F_audio.resample(wav_data, 16000, 8000)  # 假设将采样率从16000降低到8000
                 data_len = 16000  
                 out_data = wav_data
                 # Pad smaller audio files with zeros to reach 1 second (8_000 samples)
@@ -166,11 +167,11 @@ def process_audio_files_exclude_prefix(root_dir, dest_dir, prefix='_'):
 
     
 if __name__ == '__main__':
-    #   root_dir = 'dataset/google_noisy/NGSCD'
-    #   dest_dir = 'dataset/google_noisy/NGSCD_SPEC'
+    root_dir = 'dataset/google_noisy/NGSCD'
+    dest_dir = 'dataset/google_noisy/NGSCD_SPEC'
 
-    root_dir = 'dataset_lege/lege_noisy/NGSCD'
-    dest_dir = 'dataset_lege/lege_noisy/NGSCD_SPEC'
+    # root_dir = 'dataset_lege/lege_noisy/NGSCD'
+    # dest_dir = 'dataset_lege/lege_noisy/NGSCD_SPEC'
 
     process_audio_files(root_dir, dest_dir)
 

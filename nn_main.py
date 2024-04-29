@@ -63,7 +63,7 @@ if __name__ == "__main__":
     print("Get models done.")
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     # loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
-    # torch.save(loaders,"loaders_google_align.pth")
+    # torch.save(loaders,"loaders/loaders_google_align.pth")
     loaders = torch.load(f"loaders/loaders_{args.dataset}_align.pth")
     print("Get loaders done.")
     model_fp32.set_args(args)

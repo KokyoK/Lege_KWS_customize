@@ -271,7 +271,7 @@ class SpeechDataset(data.Dataset):
         """ Loads audio, shifts data and adds noise. """
         # print(data_element)
         wav_data = torchaudio.load(data_element[0])[0]
-        wav_data = F_audio.resample(wav_data, 16000, 8000)  # @NOTE: 下采样到8000，部署的时候改原采样率
+        # wav_data = F_audio.resample(wav_data, 16000, 8000)  # @NOTE: 下采样到8000，部署的时候改原采样率
 
         # Background noise used for silence needs to be shortened to 1 second.
         if (data_element[1] == "silence"):
@@ -280,7 +280,6 @@ class SpeechDataset(data.Dataset):
             out_data = amplitude * wav_data[:, slice_idx:slice_idx + self.sample_length]
         else:
             out_data = 1 * wav_data
-        # print(out_data.shape)
         
        
         data_len = 16000
@@ -392,7 +391,6 @@ class TripletSpeechDataset(data.Dataset):
         self.transforms = transforms
         self.dataset_type = dataset_type
         self.sample_length = sample_length
-        self.transforms = transforms
         self.word_list = word_list
         self.speaker_list = speaker_list   
         for j in range(len(self.triplet_list)):
@@ -435,6 +433,7 @@ class TripletSpeechDataset(data.Dataset):
         clean_path =  cleanpath_root+data_element[0]
         
         # 读取 wav
+        # clean_path = data_path = "dataset/google_origin/bed/0a7c2a8d_nohash_0.wav"
         # out_data = self.process_audio(data_path=data_path)
         # clean_data = self.process_audio(data_path=clean_path)
         
@@ -447,10 +446,9 @@ class TripletSpeechDataset(data.Dataset):
     
     def process_audio(self, data_path):
         wav_data = torchaudio.load(data_path)[0]
-        wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
+        # wav_data = F_audio.resample(wav_data, 16000, 8000)  # 认为是一秒的数据
 
         out_data = 1 * wav_data
-        # print(out_data.shape)
 
         data_len = 16000
         # Pad smaller audio files with zeros to reach 1 second (16_000 samples)
@@ -499,7 +497,7 @@ def get_loaders( root_dir, word_list,speaker_list,):
    
 if __name__ == "__main__":
     # Test example
-    # dataset_folder = "dataset_lege"
+    dataset_folder = "dataset_lege"
     # root_dir = f"{dataset_folder}/lege_noisy/NGSCD/"
     # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     # speaker_list = fetch_speaker_list(root_dir,word_list)
@@ -510,20 +508,33 @@ if __name__ == "__main__":
     # torch.save(self.state_dict(), "saved_model/" + name)
     # @todo: data preparation
 
-    # root_dir =  f"{dataset_folder}/google_noisy/NGSCD/"
-    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
-    # speaker_list = fetch_speaker_list(root_dir,word_list)
-    # print("num speakers: ", len(speaker_list))
-    # loaders = get_loaders(root_dir, word_list, speaker_list)
+
+    dataset_folder = "dataset"
+    root_dir =  f"{dataset_folder}/google_noisy/NGSCD/"
+    word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    speaker_list = fetch_speaker_list(root_dir,word_list)
+    print("num speakers: ", len(speaker_list))
+    
+    
+    
+    split_root = f'{root_dir.replace("NGSCD/","")}split/'
+    ap = AudioPreprocessor()
+    test_trip = read_csv(split_root+"test.csv")
+    test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
+    test_dataloader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
+    for batch_idx, (anchor_batch, positive_batch, negative_batch) in enumerate(test_dataloader):
+        anchor_data, anchor_clean, [anchor_kws_label,_,_,_] = anchor_batch
+        break
+    print(anchor_data)
     
     
 
     
     # # NOTE 生成数据集 merge后的list
     # csv_lists_path = 'dataset_lege/NoisyLEGE/csvLists/'
-    csv_lists_path = 'dataset/NoisyGSCD/csvLists_align/'
-    train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
-    print(train_df.head())
-    print(valid_df.head())
-    print(test_df.head())
+    # csv_lists_path = 'dataset/NoisyGSCD/csvLists_align/'
+    # train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
+    # print(train_df.head())
+    # print(valid_df.head())
+    # print(test_df.head())
    
