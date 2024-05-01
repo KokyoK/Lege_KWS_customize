@@ -290,8 +290,8 @@ def train(model, num_epochs, loaders,args):
 
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
     optimizer = torch.optim.Adam([
-        {'params': model.network.parameters(), 'lr': 1e-6,'weight_decay':1e-5}, 
-        {'params': model.denoise_net.parameters(), 'lr': 1e-6,'weight_decay':1e-5}    
+        {'params': model.network.parameters(), 'lr': 1e-5,'weight_decay':1e-5}, 
+        {'params': model.denoise_net.parameters(), 'lr': 1e-5,'weight_decay':1e-5}    
     ])
     prev_kws_acc = 0
     prev_speaker_loss = 999
@@ -331,7 +331,7 @@ def train(model, num_epochs, loaders,args):
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
 
             loss_orth = loss_speaker
-            loss =  loss_kws + 2*loss_speaker
+            loss =  3*loss_kws + loss_speaker
             # loss =  loss_kws 
             if args.denoise_loss =="yes":
                 loss += 0.01*loss_denoise 

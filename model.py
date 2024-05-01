@@ -12,6 +12,8 @@ from ptflops import get_model_complexity_info
 from argparse import Namespace
 from unet import OrthBlock
 from models.BCResNet import BCResNet
+from models.SpecUNet import SpecUNet
+from models.data2vec import Data2VecNoisy
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -33,6 +35,8 @@ class SiameseTCResNet(nn.Module):
             self.network = TCResNet8(k, n_mels, n_classes, n_speaker,args)
         elif args.backbone == "bc":
             self.network = BCResNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
+        elif args.backbone == "vec":
+            self.network = Data2VecNoisy(args=args, n_speaker=n_speaker, n_class= n_classes)
         else:
             self.network = unet.StarNet(args=args,n_speaker = n_speaker)
         # self.network = unet.StarNet()
@@ -40,6 +44,8 @@ class SiameseTCResNet(nn.Module):
             self.denoise_net = simple_mamba.Mamba()
         elif args.denoise_net == "unet":
             self.denoise_net = unet.UNet()
+        elif args.denoise_net == "specu":
+            self.denoise_net = SpecUNet()
         elif args.denoise_net == "sub":
             self.denoise_net = Sub()
             

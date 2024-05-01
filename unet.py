@@ -143,7 +143,7 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, ], mlp_ratio=2, drop_path_rate=0.0, num_classes=10,n_speaker=1841, args=None):
+    def __init__(self, base_dim=16, depths=[1, 1, ], mlp_ratio=2, drop_path_rate=0, num_classes=10,n_speaker=1841, args=None):
         super().__init__()
         self.args = args
         self.num_classes = num_classes

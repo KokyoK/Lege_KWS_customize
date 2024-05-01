@@ -31,8 +31,8 @@ parser.add_argument('--ptname', default="our", help='')
 parser.add_argument('--train', default="yes", help='')
 parser.add_argument('--denoise_loss', default="yes", help='')
 parser.add_argument('--orth_loss', default="yes", help='')
-parser.add_argument('--backbone', default="star", help='res | star')
-parser.add_argument('--denoise_net', default="unet", help='')
+parser.add_argument('--backbone', default="star", help='res | star ｜ bc | vec')
+parser.add_argument('--denoise_net', default="specu", help='')
 parser.add_argument('--att', default="no", help='')
 
 args = parser.parse_args()
@@ -70,13 +70,15 @@ if __name__ == "__main__":
 
     if TRAIN :
         # model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
-        model_fp32.load("google_noisy/my_30_kwsacc_82.55_idloss_0.2062")
+        # model_fp32.load("google_noisy/cammd_18_kwsacc_83.18_idloss_0.2399")
         util.train(model_fp32, NUM_EPOCH,loaders,args)
 
     else:
         # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
         # model_fp32.load("google_noisy/my_30_kwsacc_83.07_idloss_0.1938")
-        model_fp32.load("google_noisy/tc_35_kwsacc_76.16_idloss_0.4820")
+        
+        model_fp32.load("google_noisy/cammd_3_kwsacc_84.03_idloss_0.2370")
+        
         util.evaluate_testset(model_fp32, loaders[2],args)
         util.evaluate_testset_all(model_fp32, loaders[2],args)
         
