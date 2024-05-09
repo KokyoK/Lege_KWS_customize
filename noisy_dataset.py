@@ -332,12 +332,29 @@ class AudioPreprocessor():
             ),
             torchaudio.transforms.AmplitudeToDB()
         )
+        self.mfcc = nn.Sequential(
+            # torchaudio.transforms.Resample(48000, 16000),  # 可以根据需要取消注释来重采样
+            torchaudio.transforms.MFCC(
+                sample_rate=16000,
+                n_mfcc=13,  # 通常取13个MFCC系数
+                melkwargs={
+                    'n_fft': 480,        # 窗口长度 = 30ms
+                    'hop_length': 160,   # 步长 = 10ms
+                    'f_min': 0,
+                    'f_max': 8000,
+                    'n_mels': 40,
+                    'window_fn': torch.hann_window
+                }
+            ),
+            torchaudio.transforms.AmplitudeToDB()
+        )
 
 
 
     def __call__(self, data):
         # print(data[0].shape)
         o_data = self.spectrogram(data)
+        # o_data = self.mfcc(data)
         # print(o_data.shape)
         # o_data = self.mfcc(data[0])
         # print(o_data[0].shape)
@@ -437,8 +454,7 @@ class TripletSpeechDataset(data.Dataset):
         # out_data = self.process_audio(data_path=data_path)
         # clean_data = self.process_audio(data_path=clean_path)
         
-        # 读取 spec
-        
+        # 读取 spec   
         out_data = torch.load(data_path.replace(".wav",".pt"))
         clean_data = torch.load(clean_path.replace(".wav",".pt"))
         # print(data_element) # ('up/888a0c49_nohash_3.wav', 'up', '888a0c49', '1', '-')

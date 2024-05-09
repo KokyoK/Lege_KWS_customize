@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import speech_dataset as sd
-import noisy_dataset as nsd 
-from timm.models.layers import DropPath, trunc_normal_
-from timm.models.registry import register_model
+# import speech_dataset as sd
+# import noisy_dataset as nsd 
+# from timm.models.layers import DropPath, trunc_normal_
+# from timm.models.registry import register_model
 import thop
 import time
-from ptflops import get_model_complexity_info
+# from ptflops import get_model_complexity_info
 import copy
+from argparse import Namespace
+
 
 torch.manual_seed(42)
 
@@ -168,7 +170,7 @@ class StarNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
         self.head_k = nn.Linear(self.in_channel, num_classes)
-        self.head_s = nn.Linear(self.in_channel, n_speaker)
+        # self.head_s = nn.Linear(self.in_channel, n_speaker)
         
         self.orth_block = OrthBlock(feature_dim=32)
         # self.apply(self._init_weights)
@@ -208,8 +210,8 @@ class StarNet(nn.Module):
         s_map = s_map.squeeze(2,3)
         # print(k_map.shape)
         out_k = self.head_k(k_map)
-        out_s = self.head_s(s_map)
-        return out_k, out_s, k_map, s_map
+        # out_s = self.head_s(s_map)
+        return out_k, out_k, k_map, s_map
     
     def _init_weights(self, m):
         if isinstance(m, nn.Linear or nn.Conv2d):
@@ -225,8 +227,14 @@ class StarNet(nn.Module):
 
     
 if __name__ == '__main__':
+    args=Namespace()
+    args.orth_loss = "no"
+    args.denoise = "no"
+    
+
+
     unet = UNet()
-    starnet = StarNet()
+    starnet = StarNet(args=args)
     input_tensor = torch.randn(1, 40, 1, 101)  # batch_size=4
     clean_tensor = torch.randn(1, 40, 1, 101) 
 

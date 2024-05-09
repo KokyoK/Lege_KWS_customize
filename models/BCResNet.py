@@ -124,7 +124,7 @@ class TransitionBlock(nn.Module):
 
 
 class BCResNet(torch.nn.Module):
-    def __init__(self,n_classes, n_speaker,args):
+    def __init__(self,args,n_classes=10, n_speaker=1861):
         self.args = args
         
         super(BCResNet, self).__init__()
@@ -198,7 +198,7 @@ class BCResNet(torch.nn.Module):
         out_k = self.conv4(k_map).squeeze(2,3)
 
 
-        out_s = self.conv4(s_map).squeeze(2,3)
+        # out_s = self.conv4(s_map).squeeze(2,3)
 
 
         # print('OUTPUT SHAPE:', out.shape)

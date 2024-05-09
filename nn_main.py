@@ -9,6 +9,7 @@ import model as md
 import argparse
 import os
 
+
 parser = argparse.ArgumentParser(description='Keyword spotting')
 # parser.add_argument('--a', default=0.5, type=float,help='weight of exit samples')
 # parser.add_argument('--dataset', default="lege", help='dataset name, options: "cifar10", "google_kws","lege_kws"')
@@ -31,7 +32,7 @@ parser.add_argument('--ptname', default="our", help='')
 parser.add_argument('--train', default="yes", help='')
 parser.add_argument('--denoise_loss', default="yes", help='')
 parser.add_argument('--orth_loss', default="yes", help='')
-parser.add_argument('--backbone', default="star", help='res | star ｜ bc | vec')
+parser.add_argument('--backbone', default="star", help='res | star ｜ bc | decouple')
 parser.add_argument('--denoise_net', default="specu", help='')
 parser.add_argument('--att', default="no", help='')
 
@@ -74,10 +75,33 @@ if __name__ == "__main__":
         util.train(model_fp32, NUM_EPOCH,loaders,args)
 
     else:
-        # model_fp32.load("google_sim_att_165_kwsacc_91.22_idloss_0.0571")
-        # model_fp32.load("google_noisy/my_30_kwsacc_83.07_idloss_0.1938")
+
         
-        model_fp32.load("google_noisy/cammd_3_kwsacc_84.03_idloss_0.2370")
+        
+        # # my
+        # # python nn_main.py  --train no 
+        model_fp32.load("cammd_3_kwsacc_84.03_idloss_0.2370")
+        
+        # # bc
+        # # python nn_main.py --train no --denoise_loss no --orth_loss no --att no --backbone bc --denoise_net specu --ptname tc
+        # model_fp32.load("saved_model/tc_67_kwsacc_80.82_idloss_0.5152")
+        # model_fp32.load("bc_base_199_kwsacc_82.86_idloss_0.4171")
+        
+        # # tc
+        # # python nn_main.py --train no --denoise_loss no --orth_loss no --att no --backbone tc --denoise_net specu --ptname tc
+        # model_fp32.load("saved_model/tc_67_kwsacc_80.82_idloss_0.5152")
+        
+        # star
+        # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone star --denoise_net specu --ptname star --train no
+        # model_fp32.load("star_27_kwsacc_82.24_idloss_0.2131")
+        
+        # python nn_main.py  --train no --denoise_loss no --orth_loss yes --att no --backbone star --denoise_net specu --ptname star 
+        # model_fp32.load("LSNMM_33_kwsacc_81.01_idloss_0.2317")
+        
+        # python nn_main.py  --train no --denoise_loss yes --orth_loss no --att no --backbone star --denoise_net specu --ptname star 
+        model_fp32.load("LSNSUB_167_kwsacc_83.76_idloss_0.2397")
+        
+        
         
         util.evaluate_testset(model_fp32, loaders[2],args)
         util.evaluate_testset_all(model_fp32, loaders[2],args)

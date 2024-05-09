@@ -1,19 +1,19 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import speech_dataset as sd
-import noisy_dataset as nsd 
+# import speech_dataset as sd
+# import noisy_dataset as nsd 
 torch.manual_seed(42)
 import thop
 import unet
 import time
-from mamba import simple_mamba
-from ptflops import get_model_complexity_info
+# from mamba import simple_mamba
+# from ptflops import get_model_complexity_info
 from argparse import Namespace
 from unet import OrthBlock
 from models.BCResNet import BCResNet
 from models.SpecUNet import SpecUNet
-from models.data2vec import Data2VecNoisy
+from models.DecoupleNet import DecoupleNet
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -35,8 +35,8 @@ class SiameseTCResNet(nn.Module):
             self.network = TCResNet8(k, n_mels, n_classes, n_speaker,args)
         elif args.backbone == "bc":
             self.network = BCResNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
-        elif args.backbone == "vec":
-            self.network = Data2VecNoisy(args=args, n_speaker=n_speaker, n_class= n_classes)
+        elif args.backbone == "decouple":
+            self.network = DecoupleNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
         else:
             self.network = unet.StarNet(args=args,n_speaker = n_speaker)
         # self.network = unet.StarNet()
@@ -54,11 +54,11 @@ class SiameseTCResNet(nn.Module):
         self.denoised_anchor = None
     def forward(self, anchor,pos,neg):
         if self.args.denoise_loss == "yes":
-            anchor, log_var, mu = self.denoise_net(anchor)
-            pos, log_varp, mup = self.denoise_net(pos)
-            neg, log_varn, mun = self.denoise_net(neg)
-            self.log_var = log_var
-            self.mu = mu
+            anchor = self.denoise_net(anchor)
+            pos  = self.denoise_net(pos)
+            neg = self.denoise_net(neg)
+            # self.log_var = log_var
+            # self.mu = mu
         # 分别处理3个输入
         self.denoised_anchor = anchor
         out_k1, out_s1, map_k1, map_s1 = self.network(anchor)
@@ -123,7 +123,7 @@ class S2_Block(nn.Module):
 class TCResNet8(nn.Module):
     """ TC-ResNet8 using Depth-wise and Point-wise Convolution """
 
-    def __init__(self, k, n_mels, n_classes, n_speaker,args):
+    def __init__(self,args,k=1, n_mels=40, n_classes=10, n_speaker=1861):
         super(TCResNet8, self).__init__()
         self.args = args
         # First Convolution layer (Depth-wise and Point-wise)
@@ -133,10 +133,10 @@ class TCResNet8(nn.Module):
 
         # S2 Blocks
         self.s2_block0 = S2_Block(int(16 * k), int(24 * k))
-        self.s2_block0_speaker = S2_Block(int(16 * k), int(24 * k))
+        # self.s2_block0_speaker = S2_Block(int(16 * k), int(24 * k))
 
         self.s2_block1 = S2_Block(int(24 * k), int(32 * k))
-        self.s2_block1_speaker = S2_Block(int(24 * k), int(32 * k))
+        # self.s2_block1_speaker = S2_Block(int(24 * k), int(32 * k))
 
         self.s2_block2 = S2_Block(int(32 * k), int(48 * k))
         self.s2_block2_speaker = S2_Block(int(32 * k), int(48 * k))
@@ -144,16 +144,16 @@ class TCResNet8(nn.Module):
         # Average Pooling and Fully Connected Layer
         self.avg_pool = nn.AvgPool2d(kernel_size=(1, 13), stride=1)
         self.fc = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0, bias=True)
-        self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=True)
+        # self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=True)
 
         # Parameters for orthogonal loss
-        self.orth_block = OrthBlock(feature_dim=48)
+        # self.orth_block = OrthBlock(feature_dim=48)
         # self.conv_ks = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
         #                                padding=(1, 1), bias=True)
         # self.conv_sk = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
         #                                padding=(1, 1), bias=True)
-        self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
-        self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        # self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
+        # self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
         self.attn_k_weights = None
         self.attn_s_weights = None
 
@@ -208,11 +208,11 @@ class TCResNet8(nn.Module):
         
         # speaker after att
         # out_s = self.avg_pool(s_map)
-        out_s = self.fc_s(s_map)
-        out_s = F.softmax(out_s, dim=1)
-        out_s = out_s.view(out_s.shape[0], -1)
+        # out_s = self.fc_s(s_map)
+        # out_s = F.softmax(out_s, dim=1)
+        # out_s = out_s.view(out_s.shape[0], -1)
     
-        return out_k, out_s, k_map, s_map
+        return out_k, s_map, k_map, s_map
 
     def save(self, is_onnx=0, name="TCResNet8"):
         if (is_onnx):

@@ -32,13 +32,17 @@ class EncoderBlock(nn.Module):
 class DecoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
+        # self.dp = nn.ConvTranspose2d(in_channels, out_channels, stride = 2, kernel_size=(1, 15), padding=(0, 7))
+        # self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
+
     def forward(self, x):
         # Correctly manage the up-sampling to ensure precise dimension recovery
         x = F.interpolate(x, scale_factor=(1, 2), mode='nearest', align_corners=None)
+        # x = self.dp(x)
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
@@ -47,6 +51,20 @@ class DecoderBlock(nn.Module):
 class SpecUNet(nn.Module):
     def __init__(self):
         super().__init__()
+        # self.encoder_channels = [40, 24, 48]
+        # self.decoder_channels = [48, 24, 40]  # Matches the reverse of encoder outputs
+
+        # self.encoders = nn.ModuleList([EncoderBlock(self.encoder_channels[i], self.encoder_channels[i+1])
+        #                                for i in range(len(self.encoder_channels)-1)])
+        # self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1])
+        #                                for i in range(len(self.decoder_channels)-1)])
+        
+        # self.fc_mu = nn.Linear(1200, 32)
+        # self.fc_var = nn.Linear(1200, 32)
+        # self.decoder_input = nn.Linear(32, 1200)
+        # self.log_var = 0
+        # self.mu = 0
+        
         self.encoder_channels = [40, 80, 160]
         self.decoder_channels = [160, 80, 40]  # Matches the reverse of encoder outputs
 
@@ -78,9 +96,9 @@ class SpecUNet(nn.Module):
             connections.append(x)
             
         temp = torch.flatten(connections[-1], start_dim=1)   
-        mu = self.fc_mu(temp)
-        log_var = self.fc_var(temp)
-        temp = self.reparameterize(mu, log_var)
+        self.mu = self.fc_mu(temp)
+        self.log_var = self.fc_var(temp)
+        temp = self.reparameterize(self.mu, self.log_var)
         temp = self.decoder_input(temp).reshape(connections[-1].shape[0], connections[-1].shape[1], connections[-1].shape[2], connections[-1].shape[3])
         
         for decoder, conn in zip(self.decoders, reversed(connections)):
@@ -90,9 +108,11 @@ class SpecUNet(nn.Module):
             x = decoder(x)
 
         # Special handling to ensure the output size matches the input
-        if x.shape[-1] != 101:
-            x = F.interpolate(x, size=(1, 101), mode='nearest')
-        return x, mu, log_var
+        # if x.shape[-1] != 101:
+        x = F.interpolate(x, size=(1, 101), mode='nearest')
+        # return x, mu, log_var
+        return x
+
 
 # Example usage
 if __name__ == "__main__":

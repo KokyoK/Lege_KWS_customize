@@ -221,7 +221,10 @@ class OrgLoss(nn.Module):
         loss_inner_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ss, net.orth_block.sk), dtype=torch.float32).view(1, 1)))/ net.orth_block.w_ss.numel()
         # return loss_k + loss_s + loss_inner_k + loss_inner_s
         # return loss_inner_k + loss_inner_s  #orth
-        return loss_k + loss_s      # cov 
+      
+        loss = loss_k + loss_s      # cov 
+        # loss = torch.Tensor([0])
+        return loss
 
         # return o_loss * 5
 class MSELoss(nn.Module):
@@ -290,8 +293,8 @@ def train(model, num_epochs, loaders,args):
 
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
     optimizer = torch.optim.Adam([
-        {'params': model.network.parameters(), 'lr': 1e-5,'weight_decay':1e-5}, 
-        {'params': model.denoise_net.parameters(), 'lr': 1e-5,'weight_decay':1e-5}    
+        {'params': model.network.parameters(), 'lr': 1e-4,'weight_decay':1e-6}, 
+        {'params': model.denoise_net.parameters(), 'lr': 1e-4,'weight_decay':1e-6}    
     ])
     prev_kws_acc = 0
     prev_speaker_loss = 999
@@ -323,16 +326,17 @@ def train(model, num_epochs, loaders,args):
 
             # calculate loss
             if args.denoise_loss == "yes":
-                kld_loss = torch.mean(-0.5 * torch.sum(1 + model.log_var - model.mu ** 2 - model.log_var.exp(), dim = 1), dim = 0)
+                kld_loss = torch.mean(-0.5 * torch.sum(1 + model.denoise_net.log_var - model.denoise_net.mu ** 2 - model.denoise_net.log_var.exp(), dim = 1), dim = 0)
             else:
                 kld_loss = 0
             loss_denoise = criterion_noise( model.denoised_anchor,anchor_clean) + 0.1*kld_loss
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
 
-            loss_orth = loss_speaker
-            loss =  3*loss_kws + loss_speaker
-            # loss =  loss_kws 
+            loss_orth  =  loss_speaker
+            loss = 3*loss_speaker + 0.8*loss_kws 
+            if args.backbone == "decouple":
+                loss += model.network.orth_loss
             if args.denoise_loss =="yes":
                 loss += 0.01*loss_denoise 
             if args.orth_loss == "yes":
