@@ -28,7 +28,7 @@ class AudioPreprocessor():
             # torchaudio.transforms.Resample(48000, 16000),  # 可以根据需要取消注释来重采样
             torchaudio.transforms.MFCC(
                 sample_rate=16000,
-                n_mfcc=13,  # 通常取13个MFCC系数
+                n_mfcc=40,  # 通常取13个MFCC系数
                 melkwargs={
                     'n_fft': 480,        # 窗口长度 = 30ms
                     'hop_length': 160,   # 步长 = 10ms
@@ -43,11 +43,8 @@ class AudioPreprocessor():
 
     def __call__(self, data):
         # print(data[0].shape)
-        o_data = self.spectrogram(data)
-        # print(o_data.shape)
-        # o_data = self.mfcc(data[0])
-        # print(o_data[0].shape)
-        # Set Filters as channels
+        # o_data = self.spectrogram(data)
+        o_data = self.mfcc(data)
         o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
         # print(o_data.shape,data[1])
         return o_data
@@ -73,36 +70,10 @@ def process_audio_files_wav(root_dir, dest_dir):
                     out_data = out_data[:, t:data_len + t]
    
                 # to spectrum
-                out_data = ap(out_data)
-                
-                              
+                out_data = ap(out_data)                      
                 rel_path = os.path.relpath(audio_path, root_dir)  # 相对路径
 
-                import os
 
-    def __init__(self):
-        self.spectrogram = nn.Sequential(
-            torchaudio.transforms.MelSpectrogram(
-                sample_rate=16000,
-                n_fft=480,          # window length = 30,
-                hop_length=160,     # stride = 10
-                f_min=0,
-                f_max=8000,
-                n_mels=40,
-                window_fn=torch.hann_window
-            ),
-            torchaudio.transforms.AmplitudeToDB()
-        )
-
-    def __call__(self, data):
-        # print(data[0].shape)
-        o_data = self.spectrogram(data)
-        o_data = self.mfcc(data)
-        # print(o_data.shape)
-
-        o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
-        # print(o_data.shape,data[1])
-        return o_data
 
 
 # 保存带噪声数据的时频图
@@ -169,21 +140,21 @@ def process_audio_files_exclude_prefix(root_dir, dest_dir, prefix='_'):
         print(subdir)
 
 
-# if __name__ == '__main__':
-#     # root_dir = 'dataset/google_origin'
-#     # dest_dir = 'dataset/google_origin_SPEC'
+if __name__ == '__main__':
+    root_dir = 'dataset/google_origin'
+    dest_dir = 'dataset/google_origin_MFCC'
 
 #     root_dir = 'dataset_lege/lege_origin'
 #     dest_dir = 'dataset_lege/lege_origin_SPEC'
 
-#     process_audio_files_exclude_prefix(root_dir, dest_dir)
+    process_audio_files_exclude_prefix(root_dir, dest_dir)
     
 
     
-if __name__ == '__main__':
-    root_dir = 'dataset/google_noisy/NGSCD'
-    dest_dir = 'dataset/google_noisy/NGSCD_MFCC/'
-    process_audio_files(root_dir, dest_dir)   
+# if __name__ == '__main__':
+#     root_dir = 'dataset/google_noisy/NGSCD'
+#     dest_dir = 'dataset/google_noisy/NGSCD_MFCC/'
+#     process_audio_files(root_dir, dest_dir)   
 
     # root_dir = 'dataset/google_origin/'
     # dest_dir = 'dataset/google_origin_SPEC/'

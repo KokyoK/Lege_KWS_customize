@@ -334,7 +334,7 @@ def train(model, num_epochs, loaders,args):
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
 
             loss_orth  =  loss_speaker
-            loss = 3*loss_speaker + 0.8*loss_kws 
+            loss = loss_speaker + loss_kws 
             if args.backbone == "decouple":
                 loss += model.network.orth_loss
             if args.denoise_loss =="yes":

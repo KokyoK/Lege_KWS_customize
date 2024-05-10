@@ -49,7 +49,7 @@ def fetch_speaker_list(ROOT_DIR, WORD_LIST):
                                 speaker_list.append(id)
             # else:
 
-    elif ROOT_DIR == f"{dataset_folder}/google_origin/" or ROOT_DIR == f"{dataset_folder}/google_noisy/NGSCD/" or ROOT_DIR == f"{dataset_folder}/google_noisy/NGSCD_SPEC/" :
+    elif ("google" in ROOT_DIR) or ("GSCD" in ROOT_DIR):
         ROOT_DIR = f"{dataset_folder}/google_origin/" 
         available_words = os.listdir(ROOT_DIR)  # 列出原数据集的words
         for i, word in enumerate(available_words):
@@ -346,7 +346,7 @@ class AudioPreprocessor():
                     'window_fn': torch.hann_window
                 }
             ),
-            torchaudio.transforms.AmplitudeToDB()
+            # torchaudio.transforms.AmplitudeToDB()
         )
 
 
@@ -410,6 +410,7 @@ class TripletSpeechDataset(data.Dataset):
         self.sample_length = sample_length
         self.word_list = word_list
         self.speaker_list = speaker_list   
+        self.feat_type = "MFCC"
         for j in range(len(self.triplet_list)):
             # triplet = triplet_list[j]
             anchor, positive, negative = self.triplet_list[j]
@@ -438,7 +439,7 @@ class TripletSpeechDataset(data.Dataset):
             dataset_name = "lege"
         elif dataset_folder == "dataset":
             dataset_name = "google"
-        datapath_root = f"{dataset_folder}/{dataset_name}_noisy/NGSCD_SPEC/"
+        datapath_root = f"{dataset_folder}/{dataset_name}_noisy/NGSCD_{self.feat_type}/"
         # data_path = self.dataset_type+"/"+ 
         if data_element[4]=='-':
             data_path = f"clean{data_element[3]}"
@@ -446,8 +447,9 @@ class TripletSpeechDataset(data.Dataset):
             data_path = f"N{data_element[3]}_SNR{data_element[4]}"
         data_path = datapath_root + self.dataset_type+"/"+ data_path + "/" +data_element[0].replace("/","_")
 
-        cleanpath_root = f"{dataset_folder}/{dataset_name}_origin_SPEC/"
+        cleanpath_root = f"{dataset_folder}/{dataset_name}_origin_{self.feat_type}/"
         clean_path =  cleanpath_root+data_element[0]
+
         
         # 读取 wav
         # clean_path = data_path = "dataset/google_origin/bed/0a7c2a8d_nohash_0.wav"
@@ -480,11 +482,13 @@ class TripletSpeechDataset(data.Dataset):
         out_data = self.transforms(out_data)
         return out_data
         
-def get_loaders( root_dir, word_list,speaker_list,):
+def get_loaders( root_dir, word_list,speaker_list,args):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
-    
-    split_root = f'{root_dir.replace("NGSCD_SPEC/","")}split_align/'
+    if args.feat =="spec":
+        split_root = f'{root_dir.replace("NGSCD_SPEC/","")}split_align/'
+    elif args.feat =="mfcc":
+        split_root = f'{root_dir.replace("NGSCD_MFCC/","")}split_align/'
     
     train_trips = []
     valid_trips = []

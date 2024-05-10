@@ -19,7 +19,7 @@
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/bco.csv --denoise_loss no --orth_loss yes --att no --backbone bc --denoise_net unet --ptname bco> logs/noisy/aligncov.py 2>&1 &
 
 ##### Decouple Net #####
-CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/decouple.csv --denoise_loss no --orth_loss no --att no --backbone decouple --denoise_net unet --ptname d> logs/noisy/decouple.py 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/decouple_mfcc.csv --denoise_loss no --orth_loss no --feat mfcc --att no --backbone decouple --denoise_net unet --ptname dmfcc> logs/noisy/decouple_mfcc.py 2>&1 &
 
 # camm
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/specu.csv --denoise_loss yes --orth_loss yes --att no --backbone star --denoise_net specu --ptname cammd> logs/noisy/spec.py 2>&1 &
