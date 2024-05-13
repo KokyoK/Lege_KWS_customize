@@ -338,10 +338,10 @@ def train(model, num_epochs, loaders,args):
             if args.backbone == "decouple":
                 loss += model.network.orth_loss
             if args.denoise_loss =="yes":
-                loss += 0.01*loss_denoise 
+                loss += 0.1*loss_denoise 
             if args.orth_loss == "yes":
                 loss_orth = criterion_orth(model.network)
-                loss += loss_orth
+                # loss += loss_orth
 
             
             # loss_denoise.backward(retain_graph=True)

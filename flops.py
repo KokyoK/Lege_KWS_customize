@@ -13,9 +13,10 @@ from argparse import Namespace
 
 from unet import UNet,StarNet
 from models.BCResNet import BCResNet
-from model import TCResNet8
 from models.SpecUNet import SpecUNet
 from models.DecoupleNet import DecoupleNet
+from models.TCResNets import TCResNet14,TCResNet8
+from models.KWT import KWT
 # from torch_flops import *
 
 
@@ -49,10 +50,18 @@ if __name__ == "__main__":
     starnet = StarNet(args=args)
     macs, params = thop.profile(starnet,inputs=(input_tensor,))
     print(f"STAR NET macs {macs}, params {params}")
+    
+    kwt = KWT(args=args)
+    macs, params = thop.profile(kwt,inputs=(input_tensor,))
+    print(f"KWT macs {macs}, params {params}")
 
     tcresnet = TCResNet8(args=args)
     macs, params = thop.profile(tcresnet,inputs=(input_tensor,))
-    print(f"TC NET macs {macs}, params {params}")
+    print(f"TC 8 NET macs {macs}, params {params}")
+    
+    tcresnet14 = TCResNet14(args=args)
+    macs, params = thop.profile(tcresnet14,inputs=(input_tensor,))
+    print(f"TC 14 NET macs {macs}, params {params}")
 
     bcresnet = BCResNet(args=args)
     macs, params = thop.profile(bcresnet,inputs=(input_tensor,))

@@ -11,3 +11,4 @@ input_samples/
 mamba/__pycache__
 *.pth
 dataset_lege/
+.ipynb_checkpoints/

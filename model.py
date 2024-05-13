@@ -14,6 +14,7 @@ from unet import OrthBlock
 from models.BCResNet import BCResNet
 from models.SpecUNet import SpecUNet
 from models.DecoupleNet import DecoupleNet
+from models.TCResNets import TCResNet14,TCResNet8
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -33,6 +34,8 @@ class SiameseTCResNet(nn.Module):
         # 使用TCResNet8作为子网络
         if args.backbone =="res":
             self.network = TCResNet8(k, n_mels, n_classes, n_speaker,args)
+        if args.backbone =="tc14":
+            self.network = TCResNet14(args=args,k=k, n_mels=n_mels, n_classes=n_classes)
         elif args.backbone == "bc":
             self.network = BCResNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
         elif args.backbone == "decouple":
@@ -118,112 +121,6 @@ class S2_Block(nn.Module):
 
         return out
 
-
-
-class TCResNet8(nn.Module):
-    """ TC-ResNet8 using Depth-wise and Point-wise Convolution """
-
-    def __init__(self,args,k=1, n_mels=40, n_classes=10, n_speaker=1861):
-        super(TCResNet8, self).__init__()
-        self.args = args
-        # First Convolution layer (Depth-wise and Point-wise)
-        self.dw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=(1, 3),
-                                       padding=(0, 1), bias=True)
-        # self.pw_conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16 * k), kernel_size=1, bias=False)
-
-        # S2 Blocks
-        self.s2_block0 = S2_Block(int(16 * k), int(24 * k))
-        # self.s2_block0_speaker = S2_Block(int(16 * k), int(24 * k))
-
-        self.s2_block1 = S2_Block(int(24 * k), int(32 * k))
-        # self.s2_block1_speaker = S2_Block(int(24 * k), int(32 * k))
-
-        self.s2_block2 = S2_Block(int(32 * k), int(48 * k))
-        self.s2_block2_speaker = S2_Block(int(32 * k), int(48 * k))
-
-        # Average Pooling and Fully Connected Layer
-        self.avg_pool = nn.AvgPool2d(kernel_size=(1, 13), stride=1)
-        self.fc = nn.Conv2d(in_channels=int(48 * k), out_channels=n_classes, kernel_size=1, padding=0, bias=True)
-        # self.fc_s = nn.Conv2d(in_channels=int(48 * k), out_channels=n_speaker, kernel_size=1, padding=0, bias=True)
-
-        # Parameters for orthogonal loss
-        # self.orth_block = OrthBlock(feature_dim=48)
-        # self.conv_ks = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
-        #                                padding=(1, 1), bias=True)
-        # self.conv_sk = nn.Conv2d(in_channels=48, out_channels=48, kernel_size=(1, 3),
-        #                                padding=(1, 1), bias=True)
-        # self.kws_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
-        # self.sid_attn = nn.MultiheadAttention(embed_dim=51, num_heads=1)
-        self.attn_k_weights = None
-        self.attn_s_weights = None
-
-
-    def forward(self, x):
-        # First depth-wise and point-wise convolution
-        out = self.dw_conv_block(x)
-        # out = self.pw_conv_block(out)
-
-       # S2 Blocks处理
-        share_map = self.s2_block0(out)
-        share_map = self.s2_block1(share_map)
-        # print( attn_k.shape)
-
-
-        # keyword recognition path
-        # out_k = self.s2_block1(share_map)
-        k_map = self.s2_block2(share_map)
-        # k_map_T = k_map.squeeze(2).permute(1, 0, 2)
-
-        # speaker recognition 
-        # out_s = self.s2_block1_speaker(share_map)
-        s_map = self.s2_block2_speaker(share_map)
-        # s_map_T = s_map.squeeze(2).permute(1, 0, 2)   
-
-        k_map = self.avg_pool(k_map)
-        s_map = self.avg_pool(s_map)
-        # todo: use cross ortho k_map -> kk, ks.  s_map -> ss, sk
-        # baseline 
-        # k_map = k_map.unsqueeze(2).unsqueeze(3)
-        # s_map = s_map.unsqueeze(2).unsqueeze(3)
-        # ###
-        # kk = F.linear(k_map, self.w_kk)
-        # ks = F.linear(k_map, self.w_ks)
-        # sk = F.linear(s_map, self.w_sk)
-        # ss = F.linear(s_map, self.w_ss)
-        # k_map = kk.unsqueeze(2).unsqueeze(3)
-        # s_map = ss.unsqueeze(2).unsqueeze(3)
-        
-        # better
-        if self.args.orth_loss == "yes":       
-            k_map, s_map = self.orth_block(k_map, s_map)
-
-
-        
-        # print(k_map.shape)
-        # kws after att
-        # out_k = self.avg_pool(k_map)
-        out_k = self.fc(k_map)
-        out_k = F.softmax(out_k, dim=1)
-        out_k = out_k.view(out_k.shape[0], -1)
-        
-        # speaker after att
-        # out_s = self.avg_pool(s_map)
-        # out_s = self.fc_s(s_map)
-        # out_s = F.softmax(out_s, dim=1)
-        # out_s = out_s.view(out_s.shape[0], -1)
-    
-        return out_k, s_map, k_map, s_map
-
-    def save(self, is_onnx=0, name="TCResNet8"):
-        if (is_onnx):
-            dummy_input = torch.randn(16, 40, 1, 101)
-            torch.onnx.export(self, dummy_input, "TCResNet8.onnx", verbose=True, input_names=["input0"],
-                              output_names=["output0"])
-        else:
-            torch.save(self.state_dict(), "saved_model/" + name)
-
-    def load(self, name="TCResNet8"):
-        self.load_state_dict(torch.load("saved_model/" + name, map_location=lambda storage, loc: storage))
 
 import torch
 import torch.nn as nn

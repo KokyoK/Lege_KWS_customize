@@ -32,7 +32,7 @@ parser.add_argument('--ptname', default="our", help='')
 parser.add_argument('--train', default="yes", help='')
 parser.add_argument('--denoise_loss', default="yes", help='')
 parser.add_argument('--orth_loss', default="yes", help='')
-parser.add_argument('--backbone', default="star", help='res | star ｜ bc | decouple')
+parser.add_argument('--backbone', default="star", help='res | star ｜ bc | decouple | tc14')
 parser.add_argument('--denoise_net', default="specu", help='')
 parser.add_argument('--feat', default="spec", help='spec | mfcc ')
 parser.add_argument('--att', default="no", help='')
@@ -70,14 +70,15 @@ if __name__ == "__main__":
     # loaders = sd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST)
     # loaders = nd.get_loaders( ROOT_DIR, WORD_LIST,SPEAKER_LIST,args)
     # torch.save(loaders,"loaders/loaders_google_mfcc.pth")
-    # loaders = torch.load(f"loaders/loaders_{args.dataset}_align.pth")
-    loaders = torch.load(f"loaders/loaders_{args.dataset}_{args.feat}.pth")
+    loaders = torch.load(f"loaders/loaders_{args.dataset}_align.pth")
+    # loaders = torch.load(f"loaders/loaders_{args.dataset}_{args.feat}.pth")
     print("Get loaders done.")
     model_fp32.set_args(args)
 
     if TRAIN :
         # model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
         # model_fp32.load("google_noisy/cammd_18_kwsacc_83.18_idloss_0.2399")
+        # model_fp32.load("google_noisy/myspec_12_kwsacc_83.04_idloss_0.2121")
         util.train(model_fp32, NUM_EPOCH,loaders,args)
 
     else:

@@ -11,7 +11,7 @@ import time
 import copy
 from argparse import Namespace
 
-
+from models.TCResNets import S1_Block,S2_Block
 torch.manual_seed(42)
 
 class OrthBlock(nn.Module):
@@ -123,7 +123,8 @@ class ConvBN(nn.Module):
         x = self.conv(x)
         x = self.bn(x)
         return x
-              
+
+
 class Block(nn.Module):
     def __init__(self, dim, mlp_ratio=2, drop_path=0):
         super().__init__()
@@ -145,7 +146,7 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, ], mlp_ratio=2, drop_path_rate=0, num_classes=10,n_speaker=1841, args=None):
+    def __init__(self, base_dim=16, depths=[1, 1, ], mlp_ratio=4, drop_path_rate=0, num_classes=10,n_speaker=1841, args=None):
         super().__init__()
         self.args = args
         self.num_classes = num_classes
@@ -165,6 +166,7 @@ class StarNet(nn.Module):
             cur += depths[i_layer]
             self.stages.append(nn.Sequential(down_sampler, *blocks))
         self.k_block = copy.deepcopy(self.stages[len(depths)-1])
+        self.k_block_tc = S1_Block(16)
         self.s_block = copy.deepcopy(self.k_block)
         self.norm = nn.BatchNorm2d(self.in_channel)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
@@ -174,8 +176,8 @@ class StarNet(nn.Module):
         
         self.orth_block = OrthBlock(feature_dim=32)
         # self.apply(self._init_weights)
-        self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
-        self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        # self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        # self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
     def forward(self, x):
         x = self.stem(x)
         for i in range(len(self.stages)-1):
@@ -197,8 +199,9 @@ class StarNet(nn.Module):
             
         #     k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
         #     s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
-
-        k_map = self.k_block(x)
+        # print(x.shape)
+        k_map = self.k_block_tc(x)
+        k_map = self.k_block(k_map)
         s_map = self.s_block(x)
 
 
@@ -236,25 +239,26 @@ if __name__ == '__main__':
     unet = UNet()
     starnet = StarNet(args=args)
     input_tensor = torch.randn(1, 40, 1, 101)  # batch_size=4
-    clean_tensor = torch.randn(1, 40, 1, 101) 
+    clean_tensor = torch.randn(2, 40, 1, 101) 
 
+#     output_tensor = starnet(input_tensor)
+#     # print(output_tensor.shape)
+
+#     flops, params = thop.profile(unet,inputs=(input_tensor,))
+#     print(f"U NET flops {flops}, params {params}")
+
+    
     output_tensor = starnet(input_tensor)
-    # print(output_tensor.shape)
-
-    flops, params = thop.profile(unet,inputs=(input_tensor,))
-    print(f"U NET flops {flops}, params {params}")
-
-    
-    # output_tensor = starnet(input_tensor)
-    macs, params = thop.profile(starnet,inputs=(input_tensor,))
-    # start = time.time()
-    # for i in range(1000):
-    #     out = starnet(input_tensor)
-    # end = time.time()
-    # print("Running time of start net: ", (end-start)) # ms
-    print(f"STAR NET macs {macs}, params {params}")
+    # print(output_tensor)
+#     macs, params = thop.profile(starnet,inputs=(input_tensor,))
+#     # start = time.time()
+#     # for i in range(1000):
+#     #     out = starnet(input_tensor)
+#     # end = time.time()
+#     # print("Running time of start net: ", (end-start)) # ms
+#     print(f"STAR NET macs {macs}, params {params}")
     
 
-    # flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
-    # print('flops: ', flops, 'params: ', params)
+#     # flops, params = get_model_complexity_info(starnet, (40,1,101), as_strings=True, print_per_layer_stat=True)
+#     # print('flops: ', flops, 'params: ', params)
 

@@ -38,7 +38,6 @@ class AudioPreprocessor():
                     'window_fn': torch.hann_window
                 }
             ),
-            torchaudio.transforms.AmplitudeToDB()
         )
 
     def __call__(self, data):
@@ -106,6 +105,7 @@ def process_audio_files(root_dir, dest_dir):
                 spec_filename = spec_path.replace('.wav', '.pt')  # 将文件扩展名改为.pt
                 torch.save(out_data, spec_filename)
         print(subdir)
+
 
 # 保存原始数据的时频图            
 def process_audio_files_exclude_prefix(root_dir, dest_dir, prefix='_'):
