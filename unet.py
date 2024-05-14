@@ -146,14 +146,15 @@ class Block(nn.Module):
 
 
 class StarNet(nn.Module):
-    def __init__(self, base_dim=16, depths=[1, 1, ], mlp_ratio=4, drop_path_rate=0, num_classes=10,n_speaker=1841, args=None):
+    def __init__(self, base_dim=32, depths=[1, 1, ], mlp_ratio=4, drop_path_rate=0, num_classes=10,n_speaker=1841, args=None):
         super().__init__()
         self.args = args
         self.num_classes = num_classes
-        self.in_channel = 16
+        self.in_channel = 32
         self.stem = nn.Sequential(
             ConvBN(40, self.in_channel, kernel_size=[1, 3], stride=1, padding=[0, 1]),
-            nn.ReLU6()
+            nn.ReLU6(),
+            # S1_Block(32)
         )
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         self.stages = nn.ModuleList()
@@ -184,7 +185,7 @@ class StarNet(nn.Module):
        
         self.s_block = nn.Sequential(down_sampler_s, *blocks_s)
         self.k_block = nn.Sequential(down_sampler, *blocks)
-        self.k_block_tc = nn.Sequential(S1_Block(16))
+        self.k_block_tc = nn.Sequential(S1_Block(32),S2_Block(32,48))
 
         
         # self.s_block = nn.Sequential(down_sampler, *blocks)
@@ -194,15 +195,17 @@ class StarNet(nn.Module):
         self.head_k = nn.Linear(self.in_channel, num_classes)
         # self.head_s = nn.Linear(self.in_channel, n_speaker)
         
-        self.orth_block = OrthBlock(feature_dim=32)
+        self.orth_block = OrthBlock(feature_dim=64)
         # self.apply(self._init_weights)
         # self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
         # self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
+        
     def forward(self, x):
         x = self.stem(x)
-        for i in range(len(self.stages)-1):
-            stage = self.stages[i]
-            x = stage(x)
+        # for i in range(len(self.stages)-1):
+        stage = self.stages[0]
+        
+
         # if self.args.att == "yes":
         #     share_map_T = x.squeeze(2).permute(1, 0, 2)
         #     attn_k, attn_k_weights = self.k_attn(share_map_T, share_map_T, share_map_T)
@@ -220,9 +223,13 @@ class StarNet(nn.Module):
         #     k_map = attn_k.permute(1, 0, 2).unsqueeze(2)
         #     s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
         # print(x.shape)
+        x = stage(x)
+        # x = stage(x)
+
+        
         k_map = self.k_block_tc(x)
-        # print(k_map.shape)
         k_map = self.k_block(x)
+        # s_map = stage(x)
         s_map = self.s_block(x)
 
 
@@ -252,7 +259,7 @@ class StarNet(nn.Module):
     
 if __name__ == '__main__':
     args=Namespace()
-    args.orth_loss = "no"
+    args.orth_loss = "yes"
     args.denoise = "no"
     
 

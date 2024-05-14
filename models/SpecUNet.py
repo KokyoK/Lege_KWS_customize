@@ -17,8 +17,7 @@ class DepthwiseSeparableConv2d(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, k):
         super().__init__()
-        # self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 1))
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -26,24 +25,30 @@ class EncoderBlock(nn.Module):
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
-        # Ensure no dimensionality change due to odd width
         x = F.avg_pool2d(x, kernel_size=(1, 2), stride=(1, 2))
         return x
 
-class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels,k):
+class PixelShuffleUpsample(nn.Module):
+    def __init__(self, in_channels, out_channels, scale_factor):
         super().__init__()
-        # self.conv = nn.ConvTranspose2d(in_channels, out_channels, stride = 2, kernel_size=(1, 15), padding=(0, 7))
-        self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 1))
-        # self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 1))
+        self.conv = nn.Conv2d(in_channels, out_channels * (scale_factor ** 2), kernel_size=1)
+        self.pixel_shuffle = nn.PixelShuffle(scale_factor)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.pixel_shuffle(x)
+        return x
+
+class DecoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, k):
+        super().__init__()
+        self.upsample = PixelShuffleUpsample(in_channels, out_channels, scale_factor=2)
+        self.conv = DepthwiseSeparableConv2d(out_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
-
     def forward(self, x):
-        # Correctly manage the up-sampling to ensure precise dimension recovery
-        x = F.interpolate(x, scale_factor=(1, 2), mode='nearest', align_corners=None)
-        # x = self.dp(x)
+        x = self.upsample(x)
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
@@ -52,20 +57,6 @@ class DecoderBlock(nn.Module):
 class SpecUNet(nn.Module):
     def __init__(self):
         super().__init__()
-        # self.encoder_channels = [40, 24, 48]
-        # self.decoder_channels = [48, 24, 40]  # Matches the reverse of encoder outputs
-
-        # self.encoders = nn.ModuleList([EncoderBlock(self.encoder_channels[i], self.encoder_channels[i+1])
-        #                                for i in range(len(self.encoder_channels)-1)])
-        # self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1])
-        #                                for i in range(len(self.decoder_channels)-1)])
-        
-        # self.fc_mu = nn.Linear(1200, 32)
-        # self.fc_var = nn.Linear(1200, 32)
-        # self.decoder_input = nn.Linear(32, 1200)
-        # self.log_var = 0
-        # self.mu = 0
-        
         self.encoder_channels = [40, 80, 160]
         self.decoder_channels = [160, 80, 40]  # Matches the reverse of encoder outputs
 
@@ -74,18 +65,12 @@ class SpecUNet(nn.Module):
         self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1], (1,15))
                                        for i in range(len(self.decoder_channels)-1)])
         
-        d =2560
+        d = 4000
         self.fc_mu = nn.Linear(d, 128)
         self.fc_var = nn.Linear(d, 128)
         self.decoder_input = nn.Linear(128, d)
+    
     def reparameterize(self, mu, logvar):
-        """
-        Reparameterization trick to sample from N(mu, var) from
-        N(0,1).
-        :param mu: (Tensor) Mean of the latent Gaussian [B x D]
-        :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
-        :return: (Tensor) [B x D]
-        """
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return eps * std + mu
@@ -104,15 +89,11 @@ class SpecUNet(nn.Module):
         temp = self.decoder_input(temp).reshape(connections[-1].shape[0], connections[-1].shape[1], connections[-1].shape[2], connections[-1].shape[3])
         
         for decoder, conn in zip(self.decoders, reversed(connections)):
-            # Reshape to match the dimensions of the connection exactly for residual connection
             x = F.interpolate(x, size=conn.shape[2:], mode='nearest')
             x = x + conn  # Residual connection by adding
             x = decoder(x)
 
-        # Special handling to ensure the output size matches the input
-        # if x.shape[-1] != 101:
         x = F.interpolate(x, size=(1, 101), mode='nearest')
-        # return x, mu, log_var
         return x
 
 
