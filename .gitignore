@@ -12,3 +12,4 @@ mamba/__pycache__
 *.pth
 dataset_lege/
 .ipynb_checkpoints/
+models/__pycache__/
