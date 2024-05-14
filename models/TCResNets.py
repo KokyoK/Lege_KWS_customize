@@ -101,7 +101,6 @@ class TCResNet14(nn.Module):
         self.conv_block = nn.Conv2d(in_channels=n_mels, out_channels=int(16*k), kernel_size=(1, 3), 
                                    padding = (0,1), bias=False)
 
-        # S2 Blocks
         self.s2_block0 = S2_Block(int(16*k), int(24*k))
         self.s1_block0 = S1_Block(int(24*k))
         self.s2_block1 = S2_Block(int(24*k), int(32*k))

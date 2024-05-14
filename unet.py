@@ -158,16 +158,36 @@ class StarNet(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         self.stages = nn.ModuleList()
         cur = 0
-        for i_layer in range(len(depths)):
-            embed_dim = base_dim * 2 ** i_layer
-            down_sampler = ConvBN(self.in_channel, embed_dim, [1, 3], 2, [0, 1])
-            self.in_channel = embed_dim
-            blocks = [Block(self.in_channel, mlp_ratio, dpr[cur + i]) for i in range(depths[i_layer])]
-            cur += depths[i_layer]
-            self.stages.append(nn.Sequential(down_sampler, *blocks))
-        self.k_block = copy.deepcopy(self.stages[len(depths)-1])
-        self.k_block_tc = S1_Block(16)
-        self.s_block = copy.deepcopy(self.k_block)
+        # for i_layer in range(len(depths)):
+        #     embed_dim = base_dim * 2 ** i_layer
+        #     down_sampler = ConvBN(self.in_channel, embed_dim, [1, 3], 2, [0, 1])
+        #     self.in_channel = embed_dim
+        #     blocks = [Block(self.in_channel, mlp_ratio, dpr[cur + i]) for i in range(depths[i_layer])]
+        #     cur += depths[i_layer]
+        #     self.stages.append(nn.Sequential(down_sampler, *blocks))
+        
+        embed_dim = base_dim
+        down_sampler = ConvBN(self.in_channel, embed_dim, [1, 3], 2, [0, 1])
+        self.in_channel = embed_dim
+        blocks = [Block(self.in_channel, mlp_ratio, dpr[0])]
+        cur += depths[0]
+        self.stages.append(nn.Sequential(down_sampler, *blocks))
+
+        embed_dim = base_dim * 2
+        down_sampler = ConvBN(self.in_channel, embed_dim, [1, 3], 2, [0, 1])
+        down_sampler_s = ConvBN(self.in_channel, embed_dim, [1, 3], 2, [0, 1])
+        self.in_channel = embed_dim  # 更新 self.in_channel
+        blocks = [Block(self.in_channel, mlp_ratio, dpr[cur + i]) for i in range(depths[1])]
+        blocks_s = [Block(self.in_channel, mlp_ratio, dpr[cur + i]) for i in range(depths[1])]
+        # cur += depths[1]  # 更新 cur
+        self.stages.append(nn.Sequential(down_sampler, *blocks))
+       
+        self.s_block = nn.Sequential(down_sampler_s, *blocks_s)
+        self.k_block = nn.Sequential(down_sampler, *blocks)
+        self.k_block_tc = nn.Sequential(S1_Block(16))
+
+        
+        # self.s_block = nn.Sequential(down_sampler, *blocks)
         self.norm = nn.BatchNorm2d(self.in_channel)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
@@ -201,7 +221,8 @@ class StarNet(nn.Module):
         #     s_map = attn_s.permute(1, 0, 2).unsqueeze(2)   
         # print(x.shape)
         k_map = self.k_block_tc(x)
-        k_map = self.k_block(k_map)
+        # print(k_map.shape)
+        k_map = self.k_block(x)
         s_map = self.s_block(x)
 
 

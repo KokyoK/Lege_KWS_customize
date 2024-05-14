@@ -77,8 +77,12 @@ def merge_noisy_datasets(csv_lists_path):
     def merge_and_add_columns(file_type, snrs):
         frames = []
         # 计算每组的标识符
+        if file_type == "test":
+            a,b = 4,9
+        else:
+            a,b = 1,6
 
-        for i in range(1, 9):
+        for i in range(a, b):
             file_path = os.path.join(csv_lists_path, f'{file_type}_clean{i}.csv')
             df = pd.read_csv(file_path)
             df['noise'] = df.apply(lambda x: i, axis=1)
@@ -98,9 +102,9 @@ def merge_noisy_datasets(csv_lists_path):
     test_df = merge_and_add_columns('test', snrs_te)
 
     # Save the new datasets
-    train_df.to_csv(os.path.join(f'{dataset_folder}/google_noisy/split_align', 'train.csv'), index=False)
-    valid_df.to_csv(os.path.join(f'{dataset_folder}/google_noisy/split_align', 'valid.csv'), index=False)
-    test_df.to_csv(os.path.join(f'{dataset_folder}/google_noisy/split_align', 'test.csv'), index=False)
+    train_df.to_csv(os.path.join(f'{dataset_folder}/google_noisy/split_noi', 'train.csv'), index=False)
+    valid_df.to_csv(os.path.join(f'{dataset_folder}/google_noisy/split_noi', 'valid.csv'), index=False)
+    test_df.to_csv(os.path.join(f'{dataset_folder}/google_noisy/split_noi', 'test.csv'), index=False)
 
     return train_df, valid_df, test_df
 
@@ -486,9 +490,9 @@ def get_loaders( root_dir, word_list,speaker_list,args):
     train, dev, test = split_dataset(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
     if args.feat =="spec":
-        split_root = f'{root_dir.replace("NGSCD_SPEC/","")}split_align/'
+        split_root = f'{root_dir.replace("NGSCD_SPEC/","")}split_noi/'
     elif args.feat =="mfcc":
-        split_root = f'{root_dir.replace("NGSCD_MFCC/","")}split_align/'
+        split_root = f'{root_dir.replace("NGSCD_MFCC/","")}split_noi/'
     
     train_trips = []
     valid_trips = []
@@ -517,7 +521,7 @@ def get_loaders( root_dir, word_list,speaker_list,args):
    
 if __name__ == "__main__":
     # Test example
-    dataset_folder = "dataset_lege"
+    dataset_folder = "dataset"
     # root_dir = f"{dataset_folder}/lege_noisy/NGSCD/"
     # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
     # speaker_list = fetch_speaker_list(root_dir,word_list)
@@ -529,32 +533,32 @@ if __name__ == "__main__":
     # @todo: data preparation
 
 
-    dataset_folder = "dataset"
-    root_dir =  f"{dataset_folder}/google_noisy/NGSCD/"
-    word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
-    speaker_list = fetch_speaker_list(root_dir,word_list)
-    print("num speakers: ", len(speaker_list))
+    # dataset_folder = "dataset"
+    # root_dir =  f"{dataset_folder}/google_noisy/NGSCD/"
+    # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
+    # speaker_list = fetch_speaker_list(root_dir,word_list)
+    # print("num speakers: ", len(speaker_list))
     
     
     
-    split_root = f'{root_dir.replace("NGSCD/","")}split/'
-    ap = AudioPreprocessor()
-    test_trip = read_csv(split_root+"test.csv")
-    test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
-    test_dataloader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
-    for batch_idx, (anchor_batch, positive_batch, negative_batch) in enumerate(test_dataloader):
-        anchor_data, anchor_clean, [anchor_kws_label,_,_,_] = anchor_batch
-        break
-    print(anchor_data)
+    # split_root = f'{root_dir.replace("NGSCD/","")}split/'
+    # ap = AudioPreprocessor()
+    # test_trip = read_csv(split_root+"test.csv")
+    # test_trip_dataset = TripletSpeechDataset(test_trip, "Test", ap, word_list, speaker_list)
+    # test_dataloader = data.DataLoader(test_trip_dataset, batch_size=1, shuffle=True)
+    # for batch_idx, (anchor_batch, positive_batch, negative_batch) in enumerate(test_dataloader):
+    #     anchor_data, anchor_clean, [anchor_kws_label,_,_,_] = anchor_batch
+    #     break
+    # print(anchor_data)
     
     
 
     
     # # NOTE 生成数据集 merge后的list
     # csv_lists_path = 'dataset_lege/NoisyLEGE/csvLists/'
-    # csv_lists_path = 'dataset/NoisyGSCD/csvLists_align/'
-    # train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
-    # print(train_df.head())
-    # print(valid_df.head())
-    # print(test_df.head())
+    csv_lists_path = 'dataset/NoisyGSCD/csvLists/'
+    train_df, valid_df, test_df = merge_noisy_datasets(csv_lists_path)
+    print(train_df.head())
+    print(valid_df.head())
+    print(test_df.head())
    

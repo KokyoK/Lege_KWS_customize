@@ -15,10 +15,10 @@ class DepthwiseSeparableConv2d(nn.Module):
         return x
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, k):
         super().__init__()
-        self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
-        #  self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
+        # self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 1))
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -31,11 +31,11 @@ class EncoderBlock(nn.Module):
         return x
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels,k):
         super().__init__()
-        # self.dp = nn.ConvTranspose2d(in_channels, out_channels, stride = 2, kernel_size=(1, 15), padding=(0, 7))
-        # self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
+        # self.conv = nn.ConvTranspose2d(in_channels, out_channels, stride = 2, kernel_size=(1, 15), padding=(0, 7))
+        self.conv = DepthwiseSeparableConv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 1))
+        # self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 15), padding=(0, 1))
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -69,14 +69,15 @@ class SpecUNet(nn.Module):
         self.encoder_channels = [40, 80, 160]
         self.decoder_channels = [160, 80, 40]  # Matches the reverse of encoder outputs
 
-        self.encoders = nn.ModuleList([EncoderBlock(self.encoder_channels[i], self.encoder_channels[i+1])
+        self.encoders = nn.ModuleList([EncoderBlock(self.encoder_channels[i], self.encoder_channels[i+1], (1,15))
                                        for i in range(len(self.encoder_channels)-1)])
-        self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1])
+        self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1], (1,15))
                                        for i in range(len(self.decoder_channels)-1)])
         
-        self.fc_mu = nn.Linear(4000, 128)
-        self.fc_var = nn.Linear(4000, 128)
-        self.decoder_input = nn.Linear(128, 4000)
+        d =2560
+        self.fc_mu = nn.Linear(d, 128)
+        self.fc_var = nn.Linear(d, 128)
+        self.decoder_input = nn.Linear(128, d)
     def reparameterize(self, mu, logvar):
         """
         Reparameterization trick to sample from N(mu, var) from
