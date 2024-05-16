@@ -14,6 +14,16 @@ class DepthwiseSeparableConv2d(nn.Module):
         x = self.pointwise(x)
         return x
 
+class DepthwiseConv2d(nn.Module):
+    def __init__(self, in_channels, kernel_size, padding):
+        super().__init__()
+        self.depthwise = nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size,
+                                   padding=padding, groups=in_channels)
+
+    def forward(self, x):
+        x = self.depthwise(x)
+        return x
+
 class EncoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, k):
         super().__init__()
@@ -43,7 +53,7 @@ class DecoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, k):
         super().__init__()
         self.upsample = PixelShuffleUpsample(in_channels, out_channels, scale_factor=2)
-        self.conv = DepthwiseSeparableConv2d(out_channels, out_channels, kernel_size=(1, 15), padding=(0, 7))
+        self.conv = DepthwiseSeparableConv2d(out_channels, out_channels, kernel_size=k, padding=(0, 7))
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -60,16 +70,20 @@ class SpecUNet(nn.Module):
         self.encoder_channels = [40, 80, 160]
         self.decoder_channels = [160, 80, 40]  # Matches the reverse of encoder outputs
 
-        self.encoders = nn.ModuleList([EncoderBlock(self.encoder_channels[i], self.encoder_channels[i+1], (1,15))
+        self.encoders = nn.ModuleList([EncoderBlock(self.encoder_channels[i], self.encoder_channels[i+1], (1, 15))
                                        for i in range(len(self.encoder_channels)-1)])
-        self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1], (1,15))
+        self.decoders = nn.ModuleList([DecoderBlock(self.decoder_channels[i], self.decoder_channels[i+1], (1, 15))
                                        for i in range(len(self.decoder_channels)-1)])
         
         d = 4000
         self.fc_mu = nn.Linear(d, 128)
         self.fc_var = nn.Linear(d, 128)
         self.decoder_input = nn.Linear(128, d)
-    
+        
+        # # 仅进行深度卷积用于跳跃连接
+        self.skip_convs = nn.ModuleList([DepthwiseConv2d(self.encoder_channels[2-i], kernel_size=(1, 1), padding=(0, 0))
+                                         for i in range(len(self.encoder_channels)-1)])
+
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
@@ -95,7 +109,6 @@ class SpecUNet(nn.Module):
 
         x = F.interpolate(x, size=(1, 101), mode='nearest')
         return x
-
 
 # Example usage
 if __name__ == "__main__":

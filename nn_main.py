@@ -79,8 +79,8 @@ if __name__ == "__main__":
     if TRAIN :
         # model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
         # model_fp32.load("google_noisy/cammd_18_kwsacc_83.18_idloss_0.2399")
-        # model_fp32.load("google_noisy/oh_73_kwsacc_84.94_idloss_0.2419") # oh
-        model_fp32.load("google_noisy/oh_73_kwsacc_84.94_idloss_0.2419") # oh
+        # model_fp32.load("oh_73_kwsacc_84.94_idloss_0.2419") # oh
+        model_fp32.load("google_noisy/oh5_21_kwsacc_84.49_idloss_0.1591") # oh
         util.train(model_fp32, NUM_EPOCH,loaders,args)
 
     else:
@@ -89,26 +89,34 @@ if __name__ == "__main__":
         
         # # my
         # # python nn_main.py  --train no 
-        model_fp32.load("cammd_3_kwsacc_84.03_idloss_0.2370")
+        # model_fp32.load("cammd_3_kwsacc_84.03_idloss_0.2370")
         
         # # bc
         # # python nn_main.py --train no --denoise_loss no --orth_loss no --att no --backbone bc --denoise_net specu --ptname tc
-        # model_fp32.load("saved_model/tc_67_kwsacc_80.82_idloss_0.5152")
+        # model_fp32.load("tc_67_kwsacc_80.82_idloss_0.5152")
         # model_fp32.load("bc_base_199_kwsacc_82.86_idloss_0.4171")
         
         # # tc
         # # python nn_main.py --train no --denoise_loss no --orth_loss no --att no --backbone tc --denoise_net specu --ptname tc
-        # model_fp32.load("saved_model/tc_67_kwsacc_80.82_idloss_0.5152")
+        # model_fp32.load("tc_67_kwsacc_80.82_idloss_0.5152")
         
         # star
-        # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone star --denoise_net specu --ptname star --train no
-        # model_fp32.load("star_27_kwsacc_82.24_idloss_0.2131")
+        # python nn_main.py --denoise_loss yes --orth_loss yes --att no --backbone star --denoise_net specu --ptname star --train no
+        model_fp32.load("my_61_kwsacc_85.70_idloss_0.1581")
+        
+        # decouple
+        # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone decouple --denoise_net specu --ptname star --train no --feat mfcc
+        # model_fp32.load("google_noisy/dmfccx_145_kwsacc_84.98_idloss_0.1745")
+        
         
         # python nn_main.py  --train no --denoise_loss no --orth_loss yes --att no --backbone star --denoise_net specu --ptname star 
-        # model_fp32.load("LSNMM_33_kwsacc_81.01_idloss_0.2317")
+        # model_fp32.load("LSN+MM_168_kwsacc_84.31_idloss_0.1821")
         
         # python nn_main.py  --train no --denoise_loss yes --orth_loss no --att no --backbone star --denoise_net specu --ptname star 
-        model_fp32.load("LSNSUB_167_kwsacc_83.76_idloss_0.2397")
+        # model_fp32.load("LSN+SUB_1_kwsacc_85.88_idloss_0.1635")
+        
+        # python nn_main.py  --train no --denoise_loss no --orth_loss no --att no --backbone star --denoise_net specu --ptname star 
+        # model_fp32.load("LSN_56_kwsacc_83.27_idloss_0.1687")
         
         
         

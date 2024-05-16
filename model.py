@@ -74,7 +74,7 @@ class SiameseTCResNet(nn.Module):
         torch.save(self.state_dict(), "saved_model/" + name)
 
     def load(self, name="SimTCResNet8"):
-        self.load_state_dict(torch.load("saved_model/" + name, map_location=lambda storage, loc: storage))
+        self.load_state_dict(torch.load("saved_model/" + name, map_location=lambda storage, loc: storage),strict=False)
 
     def set_args(self, args):
         self.args = args

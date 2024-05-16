@@ -14,30 +14,156 @@ from argparse import Namespace
 from models.TCResNets import S1_Block,S2_Block
 torch.manual_seed(42)
 
+
+# class OrthBlock(nn.Module):
+#     def __init__(self, feature_dim, num_heads=1):
+#         super(OrthBlock, self).__init__()
+#         self.feature_dim = feature_dim
+#         self.num_heads = num_heads
+        
+#         self.attention_ks = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+#         self.attention_sk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        
+#         self.linear_kk = nn.Linear(self.feature_dim, self.feature_dim)
+#         self.linear_ks = nn.Linear(self.feature_dim, self.feature_dim)
+#         self.linear_ss = nn.Linear(self.feature_dim, self.feature_dim)
+#         self.linear_sk = nn.Linear(self.feature_dim, self.feature_dim)
+
+#     def forward(self, k_map, s_map):
+#         batch_size, feature_dim, _, seq_length = k_map.size()
+        
+#         # Reshape to (batch_size, seq_length, feature_dim) to use with nn.MultiheadAttention
+#         k_map_seq = k_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
+#         s_map_seq = s_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
+
+#         # Perform cross attention
+#         k_to_s_output, _ = self.attention_ks(query=s_map_seq, key=k_map_seq, value=k_map_seq)  # s_map queries k_map
+#         s_to_k_output, _ = self.attention_sk(query=k_map_seq, key=s_map_seq, value=s_map_seq)  # k_map queries s_map
+
+#         # Linear transformations
+#         kk_transformed = self.linear_kk(k_map_seq)
+#         ks_transformed = self.linear_ks(k_to_s_output)
+#         ss_transformed = self.linear_ss(s_map_seq)
+#         sk_transformed = self.linear_sk(s_to_k_output)
+
+
+#         # Combine features
+#         k_final = kk_transformed + sk_transformed  # Shape: (batch_size, seq_length, feature_dim)
+#         s_final = ss_transformed + ks_transformed  # Shape: (batch_size, seq_length, feature_dim)
+
+#         # Reshape back to original shape
+#         k_final = k_final.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
+#         s_final = s_final.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
+
+#         return k_final, s_final
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class OrthogonalMultiheadAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads):
+        super(OrthogonalMultiheadAttention, self).__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
+
+        self.q_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+        self.k_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+        self.v_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+        self.o_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        nn.init.xavier_uniform_(self.q_proj_weight)
+        nn.init.xavier_uniform_(self.k_proj_weight)
+        nn.init.xavier_uniform_(self.v_proj_weight)
+        nn.init.xavier_uniform_(self.o_proj_weight)
+
+    def orthogonalize(self, weight1, weight2):
+        with torch.no_grad():
+            weight1_reshaped = weight1.view(weight1.size(0), -1)
+            weight2_reshaped = weight2.view(weight2.size(0), -1)
+            weight1_proj = weight1_reshaped - torch.mm(weight1_reshaped, torch.mm(weight2_reshaped.t(), weight2_reshaped))
+            weight2_proj = weight2_reshaped - torch.mm(weight2_reshaped, torch.mm(weight1_reshaped.t(), weight1_reshaped))
+            weight1.copy_(weight1_proj.view_as(weight1))
+            weight2.copy_(weight2_proj.view_as(weight2))
+
+    def forward(self, query, key, value):
+        # Ensuring orthogonality of query and key projection weights
+        self.orthogonalize(self.q_proj_weight, self.k_proj_weight)
+
+        batch_size = query.size(0)
+
+        # Linear projections
+        q = F.linear(query, self.q_proj_weight)
+        k = F.linear(key, self.k_proj_weight)
+        v = F.linear(value, self.v_proj_weight)
+
+        # Reshape for multi-head attention
+        q = q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # Scaled dot-product attention
+        attn_weights = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
+        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_output = torch.matmul(attn_weights, v)
+
+        # Reshape and linear projection
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
+        attn_output = F.linear(attn_output, self.o_proj_weight)
+
+        return attn_output
+
 class OrthBlock(nn.Module):
-    def __init__(self, feature_dim):
+    def __init__(self, feature_dim, num_heads=1):
         super(OrthBlock, self).__init__()
-        self.d = feature_dim
-        self.w_kk = nn.Parameter(torch.randn(self.d, self.d))
-        self.w_ks = nn.Parameter(torch.randn(self.d, self.d))
-        self.w_ss = nn.Parameter(torch.randn(self.d, self.d))
-        self.w_sk = nn.Parameter(torch.randn(self.d, self.d))
-        # self.w_s_dis = nn.Parameter(torch.randn(self.d, self.d))
-        # self.w_k_dis = nn.Parameter(torch.randn(self.d, self.d))
-        self.kk = None
-        self.ks = None
-        self.ss = None
-        self.sk = None
+        self.feature_dim = feature_dim
+
+        self.attention_kk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        self.attention_ks = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        self.attention_ss = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        self.attention_sk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        print(self.attention_kk)
+
+    def orthogonalize(self, weight1, weight2):
+        with torch.no_grad():
+            weight1_reshaped = weight1.view(weight1.size(0), -1)
+            weight2_reshaped = weight2.view(weight2.size(0), -1)
+            weight1_proj = weight1_reshaped - torch.mm(weight1_reshaped, torch.mm(weight2_reshaped.t(), weight2_reshaped))
+            weight2_proj = weight2_reshaped - torch.mm(weight2_reshaped, torch.mm(weight1_reshaped.t(), weight1_reshaped))
+            weight1.copy_(weight1_proj.view_as(weight1))
+            weight2.copy_(weight2_proj.view_as(weight2))
+
     def forward(self, k_map, s_map):
-        k_map = k_map.squeeze(2,3)
-        s_map = s_map.squeeze(2,3)
-        self.kk = self.w_kk @ k_map.T
-        self.ks = self.w_ks @ k_map.T
-        self.ss = self.w_ss @ s_map.T
-        self.sk = self.w_sk @ s_map.T
-        k_map_transformed = self.kk.T.unsqueeze(2).unsqueeze(3)
-        s_map_transformed = self.ss.T.unsqueeze(2).unsqueeze(3)
-        return k_map_transformed, s_map_transformed
+        batch_size, feature_dim, _, seq_length = k_map.size()
+
+        # Reshape to (batch_size, seq_length, feature_dim) to use with nn.MultiheadAttention
+        k_map_seq = k_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
+        s_map_seq = s_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
+
+        # Ensure orthogonality of query and key projection weights for attention_kk and attention_ks
+        # self.orthogonalize(self.attention_kk.in_proj_weight[:self.feature_dim], self.attention_ks.in_proj_weight[:self.feature_dim])
+        # self.orthogonalize(self.attention_ss.in_proj_weight[:self.feature_dim], self.attention_sk.in_proj_weight[:self.feature_dim])
+
+        # Perform attention
+        kk_output, _ = self.attention_kk(k_map_seq, k_map_seq, k_map_seq)  # Self-attention on k_map
+        ks_output, _ = self.attention_ks(k_map_seq, s_map_seq, s_map_seq)  # Cross-attention: k_map queries s_map
+        ss_output, _ = self.attention_ss(s_map_seq, s_map_seq, s_map_seq)  # Self-attention on s_map
+        sk_output, _ = self.attention_sk(s_map_seq, k_map_seq, k_map_seq)  # Cross-attention: s_map queries k_map
+
+        # Combine features
+        k_combined = kk_output + sk_output  # Shape: (batch_size, seq_length, feature_dim)
+        s_combined = ss_output + ks_output  # Shape: (batch_size, seq_length, feature_dim)
+
+        # Reshape back to original shape
+        k_final = k_map + k_combined.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
+        s_final = s_map + s_combined.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
+
+        return k_final, s_final
+
 
 
 class UNet(nn.Module):
@@ -233,10 +359,14 @@ class StarNet(nn.Module):
         s_map = self.s_block(x)
 
 
-        k_map = self.avgpool(self.norm(k_map))
-        s_map = self.avgpool(self.norm(s_map))
+
+
         if self.args.orth_loss == "yes":     
             k_map, s_map = self.orth_block(k_map, s_map)
+            
+        k_map = self.avgpool(self.norm(k_map))
+        s_map = self.avgpool(self.norm(s_map))
+        
         k_map = k_map.squeeze(2,3)
         s_map = s_map.squeeze(2,3)
         # print(k_map.shape)
@@ -266,7 +396,7 @@ if __name__ == '__main__':
 
     unet = UNet()
     starnet = StarNet(args=args)
-    input_tensor = torch.randn(1, 40, 1, 101)  # batch_size=4
+    input_tensor = torch.randn(7, 40, 1, 101)  # batch_size=4
     clean_tensor = torch.randn(2, 40, 1, 101) 
 
 #     output_tensor = starnet(input_tensor)

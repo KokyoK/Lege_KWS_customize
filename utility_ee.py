@@ -169,7 +169,7 @@ def evaluate_testset(model, test_dataloader, args):
             results.append({
                 'Category': 'Clean',
                 'SNR': '-',
-                'Keyword Accuracy (%)': accuracy_kws,
+                'Keyword Accuracy (%)': accuracy_kws.item(),
                 'EER (%)': eer
             })
         else:
@@ -183,7 +183,7 @@ def evaluate_testset(model, test_dataloader, args):
                 results.append({
                     'Category': category.capitalize(),
                     'SNR': snr,
-                    'Keyword Accuracy (%)': accuracy_kws,
+                    'Keyword Accuracy (%)': accuracy_kws.item(),
                     'EER (%)': eer
                 })
 
@@ -213,12 +213,22 @@ class OrgLoss(nn.Module):
         # loss = torch.Tensor([0])
         # if train_on_gpu:
         #     loss.to(device)
-        loss_k = torch.norm(torch.matmul(net.orth_block.w_ss.T, net.orth_block.w_sk), p='fro') **2
-        loss_s = torch.norm(torch.matmul(net.orth_block.w_ks.T, net.orth_block.w_kk), p='fro') **2
+        # w_kk = net.orth_block.w_kk
+        # w_ks = net.orth_block.w_ks
+        # w_sk = net.orth_block.w_sk
+        # w_ss = net.orth_block.w_ss
+        
+        w_kk = net.orth_block.attention_kk.in_proj_weight[:net.orth_block.feature_dim]
+        w_ks = net.orth_block.attention_ks.in_proj_weight[:net.orth_block.feature_dim]
+        w_sk = net.orth_block.attention_sk.in_proj_weight[:net.orth_block.feature_dim]
+        w_ss = net.orth_block.attention_ss.in_proj_weight[:net.orth_block.feature_dim]
+        
+        loss_k = torch.norm(torch.matmul(w_ss.T, w_sk), p='fro') **2
+        loss_s = torch.norm(torch.matmul(w_ks.T, w_kk), p='fro') **2
         
 
-        loss_inner_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ks,net.orth_block.kk), dtype=torch.float32).view(1, 1))) / net.orth_block.w_ss.numel()
-        loss_inner_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ss, net.orth_block.sk), dtype=torch.float32).view(1, 1)))/ net.orth_block.w_ss.numel()
+        # loss_inner_k = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ks,net.orth_block.kk), dtype=torch.float32).view(1, 1))) / net.orth_block.w_ss.numel()
+        # loss_inner_s = torch.trace(torch.abs(torch.as_tensor(torch.einsum("ij,ij",net.orth_block.ss, net.orth_block.sk), dtype=torch.float32).view(1, 1)))/ net.orth_block.w_ss.numel()
         # return loss_k + loss_s + loss_inner_k + loss_inner_s
         # return loss_inner_k + loss_inner_s  #orth
       
@@ -293,8 +303,8 @@ def train(model, num_epochs, loaders,args):
 
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
     optimizer = torch.optim.Adam([
-        {'params': model.network.parameters(), 'lr': 1e-5,'weight_decay':1e-6}, 
-        {'params': model.denoise_net.parameters(), 'lr': 1e-5,'weight_decay':1e-6}    
+        {'params': model.network.parameters(), 'lr': 1e-4,'weight_decay':1e-9}, 
+        {'params': model.denoise_net.parameters(), 'lr': 1e-4,'weight_decay':1e-9}    
     ])
     prev_kws_acc = 0
     prev_speaker_loss = 999
@@ -341,7 +351,7 @@ def train(model, num_epochs, loaders,args):
                 loss += 0.1*loss_denoise 
             if args.orth_loss == "yes":
                 loss_orth = criterion_orth(model.network)
-                # loss += loss_orth
+                loss += loss_orth
 
             
             # loss_denoise.backward(retain_graph=True)
