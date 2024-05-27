@@ -51,7 +51,7 @@ if __name__ == "__main__":
     macs, params = thop.profile(starnet,inputs=(input_tensor,))
     print(f"STAR NET macs {macs}, params {params}")
     
-    kwt = KWT(args=args)
+    kwt = KWT()
     macs, params = thop.profile(kwt,inputs=(input_tensor,))
     print(f"KWT macs {macs}, params {params}")
 

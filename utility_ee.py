@@ -213,15 +213,15 @@ class OrgLoss(nn.Module):
         # loss = torch.Tensor([0])
         # if train_on_gpu:
         #     loss.to(device)
-        # w_kk = net.orth_block.w_kk
-        # w_ks = net.orth_block.w_ks
-        # w_sk = net.orth_block.w_sk
-        # w_ss = net.orth_block.w_ss
+        w_kk = net.orth_block.linear_kk.weight
+        w_ks = net.orth_block.linear_ks.weight
+        w_sk = net.orth_block.linear_sk.weight
+        w_ss = net.orth_block.linear_ss.weight
         
-        w_kk = net.orth_block.attention_kk.in_proj_weight[:net.orth_block.feature_dim]
-        w_ks = net.orth_block.attention_ks.in_proj_weight[:net.orth_block.feature_dim]
-        w_sk = net.orth_block.attention_sk.in_proj_weight[:net.orth_block.feature_dim]
-        w_ss = net.orth_block.attention_ss.in_proj_weight[:net.orth_block.feature_dim]
+        # w_kk = net.orth_block.attention_kk.in_proj_weight[:net.orth_block.feature_dim]
+        # w_ks = net.orth_block.attention_ks.in_proj_weight[:net.orth_block.feature_dim]
+        # w_sk = net.orth_block.attention_sk.in_proj_weight[:net.orth_block.feature_dim]
+        # w_ss = net.orth_block.attention_ss.in_proj_weight[:net.orth_block.feature_dim]
         
         loss_k = torch.norm(torch.matmul(w_ss.T, w_sk), p='fro') **2
         loss_s = torch.norm(torch.matmul(w_ks.T, w_kk), p='fro') **2
@@ -343,10 +343,13 @@ def train(model, num_epochs, loaders,args):
             loss_kws = criterion_kws(anchor_out_kws, anchor_kws_label)
             loss_speaker = criterion_speaker(anchor_out_speaker, positive_out_speaker, negative_out_speaker)
 
-            loss_orth  =  loss_speaker
+            loss_orth  =  loss_kws
             loss = loss_speaker + loss_kws 
             if args.backbone == "decouple":
                 loss += model.network.orth_loss
+            if args.backbone == "mtn":
+                loss += model.network.calculate_loss(anchor_clean)
+                
             if args.denoise_loss =="yes":
                 loss += 0.1*loss_denoise 
             if args.orth_loss == "yes":

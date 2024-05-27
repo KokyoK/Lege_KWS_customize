@@ -22,8 +22,14 @@
 ##### Decouple Net #####
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/decouplex.csv --denoise_loss no --orth_loss no --feat mfcc --att no --backbone decouple --denoise_net unet --ptname dmfccx> logs/noisy/decouple_mfcc.py 2>&1 &
 
-# camm
-# CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/specu.csv --denoise_loss yes --orth_loss yes --att no --backbone star --denoise_net specu --ptname cammd> logs/noisy/spec.py 2>&1 &
+
+##### KWT #####
+# CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/kwt.csv --denoise_loss no --orth_loss no --feat spec --att no --backbone kwt --denoise_net unet --ptname kwt> logs/noisy/kwt.py 2>&1 &
+# CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/kwt2.csv --denoise_loss no --orth_loss no --feat mfcc --att no --backbone kwt --denoise_net unet --ptname kwt2> logs/noisy/kwt2.py 2>&1 &
+
+######## MTN #####
+# CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/mtn.csv --denoise_loss no --orth_loss no --feat spec --att no --backbone mtn --denoise_net unet --ptname mtn> logs/noisy/mtn.py 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/mtn2.csv --denoise_loss no --orth_loss no --feat spec --att no --backbone mtn --denoise_net unet --ptname mtn2> logs/noisy/mtn2.py 2>&1 &
 
 # single
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/onlykw.csv --denoise_loss yes --orth_loss yes --att no --backbone star --denoise_net specu --ptname cammd> logs/noisy/spec.py 2>&1 &
@@ -33,7 +39,7 @@
 # CUDA_VISIBLE_DEVICES=0 nohup python nn_main.py --log logs/LSN.csv --denoise_loss no --orth_loss no --att no --backbone star --denoise_net specu --ptname LSN> logs/noisy/star.py 2>&1 &
 
 # LSN + MM
-CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/LSNMM.csv --denoise_loss no --orth_loss yes --att no --backbone star --denoise_net specu --ptname LSN+MM> logs/noisy/star.py 2>&1 &
+# CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/LSNMM.csv --denoise_loss no --orth_loss yes --att no --backbone star --denoise_net specu --ptname LSN+MM> logs/noisy/star.py 2>&1 &
 
 # LSN + SUB
 # CUDA_VISIBLE_DEVICES=1 nohup python nn_main.py --log logs/LSNSUB.csv --denoise_loss yes --orth_loss no --att no --backbone star --denoise_net specu --ptname LSN+SUB> logs/noisy/star.py 2>&1 &

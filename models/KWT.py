@@ -1,25 +1,61 @@
 import torch
 import torch.nn as nn
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
+import torch.nn.functional as F
 
-class KWT(nn.Module):
-    def __init__(self, args, input_dim=40, model_dim=192, nhead=3, num_layers=12, num_classes=10):
-        self.args = args
-        super(KWT, self).__init__()
-        self.proj = nn.Linear(input_dim, model_dim)  # 输入投影层
-        encoder_layer = TransformerEncoderLayer(d_model=model_dim, nhead=nhead)
-        self.transformer = TransformerEncoder(encoder_layer, num_layers)
-        self.pool = nn.AdaptiveAvgPool1d(1)
-        self.classifier = nn.Linear(model_dim, num_classes)
+class TransformerBlock(nn.Module):
+    def __init__(self, embed_dim=64, num_heads=4, ff_dim=256, dropout_rate=0.1):
+        super(TransformerBlock, self).__init__()
+        self.attention = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout_rate)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(embed_dim, ff_dim),
+            nn.ReLU(),
+            nn.Linear(ff_dim, embed_dim),
+        )
+        self.layer_norm1 = nn.LayerNorm(embed_dim)
+        self.layer_norm2 = nn.LayerNorm(embed_dim)
+        self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x):
-        x = x.squeeze(2)  # 去掉多余的维度，变为 [batch, 40, 101]
-        x = x.permute(2, 0, 1)  # 重新排列维度以适应Transformer [sequence length, batch size, features]
-        x = self.proj(x)  # 投影到模型维度
-        x = self.transformer(x)  # Transformer处理
-        x = x.permute(1, 2, 0)  # 为池化调整维度
-        x = self.pool(x).squeeze(-1)  # 平均池化
-        x = self.classifier(x)  # 分类层
+        attn_output, _ = self.attention(x, x, x)
+        x = self.layer_norm1(x + self.dropout(attn_output))
+        ff_output = self.feed_forward(x)
+        x = self.layer_norm2(x + self.dropout(ff_output))
         return x
 
+class KWT(nn.Module):
+    def __init__(self, num_blocks=12, embed_dim=64, num_heads=4, ff_dim=256, dropout_rate=0.1, num_classes=10):
+        super(KWT, self).__init__()
+        self.conv = nn.Conv2d(1, embed_dim, kernel_size=(40, 1))
+        self.transformer_blocks = nn.ModuleList(
+            [TransformerBlock(embed_dim, num_heads, ff_dim, dropout_rate) for _ in range(num_blocks)]
+        )
+        self.classification_head = nn.Sequential(
+            nn.LayerNorm(embed_dim),
+            nn.Linear(embed_dim, num_classes)
+        )
+        self.s_head = nn.Sequential(
+            nn.LayerNorm(embed_dim),
+            nn.Linear(embed_dim, 13)
+        )
 
+    def forward(self, x):
+        x = x.permute(0,2,1,3)
+        x = self.conv(x)
+        x = x.squeeze(2).permute(2, 0, 1)  # (batch_size, embed_dim, time) -> (time, batch_size, embed_dim)
+        for block in self.transformer_blocks:
+            x = block(x)
+        x = x.mean(dim=0)  # Global average pooling
+        k_map = self.classification_head(x)
+        out_k = F.softmax(k_map, dim=-1)
+        s_map = self.s_head(x)
+        return out_k, out_k, s_map, s_map
+
+
+
+
+if __name__ == "__main__":
+    x = torch.rand(1, 40, 1, 101)
+    # TCResNet8 test
+    model_tcresnet8 = KWT()
+    result_tcresnet8 = model_tcresnet8(x)
+    print(result_tcresnet8)

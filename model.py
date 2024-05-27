@@ -15,6 +15,8 @@ from models.BCResNet import BCResNet
 from models.SpecUNet import SpecUNet
 from models.DecoupleNet import DecoupleNet
 from models.TCResNets import TCResNet14,TCResNet8
+from models.KWT import KWT
+from models.MTN import SE_SPP_KWS
 # Pytorch implementation of Temporal Convolutions (TC-ResNet).
 # Original code (Tensorflow) by Choi et al. at https://github.com/hyperconnect/TC-ResNet/blob/master/audio_nets/tc_resnet.py
 #
@@ -40,9 +42,14 @@ class SiameseTCResNet(nn.Module):
             self.network = BCResNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
         elif args.backbone == "decouple":
             self.network = DecoupleNet(args=args, n_speaker=n_speaker, n_classes= n_classes)
+        elif args.backbone == "kwt":
+            self.network = KWT()
+        elif args.backbone == "mtn":
+            self.network = SE_SPP_KWS(num_blocks=[2, 2, 2], num_classes=10)
         else:
             self.network = unet.StarNet(args=args,n_speaker = n_speaker)
         # self.network = unet.StarNet()
+
         if args.denoise_net == "mamba":
             self.denoise_net = simple_mamba.Mamba()
         elif args.denoise_net == "unet":

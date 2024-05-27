@@ -15,112 +15,62 @@ from models.TCResNets import S1_Block,S2_Block
 torch.manual_seed(42)
 
 
-# class OrthBlock(nn.Module):
-#     def __init__(self, feature_dim, num_heads=1):
-#         super(OrthBlock, self).__init__()
-#         self.feature_dim = feature_dim
-#         self.num_heads = num_heads
-        
-#         self.attention_ks = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
-#         self.attention_sk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
-        
-#         self.linear_kk = nn.Linear(self.feature_dim, self.feature_dim)
-#         self.linear_ks = nn.Linear(self.feature_dim, self.feature_dim)
-#         self.linear_ss = nn.Linear(self.feature_dim, self.feature_dim)
-#         self.linear_sk = nn.Linear(self.feature_dim, self.feature_dim)
-
-#     def forward(self, k_map, s_map):
-#         batch_size, feature_dim, _, seq_length = k_map.size()
-        
-#         # Reshape to (batch_size, seq_length, feature_dim) to use with nn.MultiheadAttention
-#         k_map_seq = k_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
-#         s_map_seq = s_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
-
-#         # Perform cross attention
-#         k_to_s_output, _ = self.attention_ks(query=s_map_seq, key=k_map_seq, value=k_map_seq)  # s_map queries k_map
-#         s_to_k_output, _ = self.attention_sk(query=k_map_seq, key=s_map_seq, value=s_map_seq)  # k_map queries s_map
-
-#         # Linear transformations
-#         kk_transformed = self.linear_kk(k_map_seq)
-#         ks_transformed = self.linear_ks(k_to_s_output)
-#         ss_transformed = self.linear_ss(s_map_seq)
-#         sk_transformed = self.linear_sk(s_to_k_output)
-
-
-#         # Combine features
-#         k_final = kk_transformed + sk_transformed  # Shape: (batch_size, seq_length, feature_dim)
-#         s_final = ss_transformed + ks_transformed  # Shape: (batch_size, seq_length, feature_dim)
-
-#         # Reshape back to original shape
-#         k_final = k_final.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
-#         s_final = s_final.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
-
-#         return k_final, s_final
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class OrthogonalMultiheadAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads):
-        super(OrthogonalMultiheadAttention, self).__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
-
-        self.q_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
-        self.k_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
-        self.v_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
-        self.o_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        nn.init.xavier_uniform_(self.q_proj_weight)
-        nn.init.xavier_uniform_(self.k_proj_weight)
-        nn.init.xavier_uniform_(self.v_proj_weight)
-        nn.init.xavier_uniform_(self.o_proj_weight)
-
-    def orthogonalize(self, weight1, weight2):
-        with torch.no_grad():
-            weight1_reshaped = weight1.view(weight1.size(0), -1)
-            weight2_reshaped = weight2.view(weight2.size(0), -1)
-            weight1_proj = weight1_reshaped - torch.mm(weight1_reshaped, torch.mm(weight2_reshaped.t(), weight2_reshaped))
-            weight2_proj = weight2_reshaped - torch.mm(weight2_reshaped, torch.mm(weight1_reshaped.t(), weight1_reshaped))
-            weight1.copy_(weight1_proj.view_as(weight1))
-            weight2.copy_(weight2_proj.view_as(weight2))
-
-    def forward(self, query, key, value):
-        # Ensuring orthogonality of query and key projection weights
-        self.orthogonalize(self.q_proj_weight, self.k_proj_weight)
-
-        batch_size = query.size(0)
-
-        # Linear projections
-        q = F.linear(query, self.q_proj_weight)
-        k = F.linear(key, self.k_proj_weight)
-        v = F.linear(value, self.v_proj_weight)
-
-        # Reshape for multi-head attention
-        q = q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # Scaled dot-product attention
-        attn_weights = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
-        attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_output = torch.matmul(attn_weights, v)
-
-        # Reshape and linear projection
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
-        attn_output = F.linear(attn_output, self.o_proj_weight)
-
-        return attn_output
-
 class OrthBlock(nn.Module):
     def __init__(self, feature_dim, num_heads=1):
         super(OrthBlock, self).__init__()
         self.feature_dim = feature_dim
+        self.num_heads = num_heads
+        
+        self.attention_kk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        self.attention_ks = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        self.attention_ss = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        self.attention_sk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
+        
+        self.linear_kk = nn.Linear(self.feature_dim, self.feature_dim)
+        self.linear_ks = nn.Linear(self.feature_dim, self.feature_dim)
+        self.linear_ss = nn.Linear(self.feature_dim, self.feature_dim)
+        self.linear_sk = nn.Linear(self.feature_dim, self.feature_dim)
+
+    def forward(self, k_map, s_map):
+        batch_size, feature_dim, _, seq_length = k_map.size()
+        
+        # Reshape to (batch_size, seq_length, feature_dim) to use with nn.MultiheadAttention
+        k_map_seq = k_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
+        s_map_seq = s_map.squeeze(2).permute(0, 2, 1)  # Shape: (batch_size, seq_length, feature_dim)
+
+        # Linear transformations
+        kk_transformed = self.linear_kk(k_map_seq)
+        ks_transformed = self.linear_ks(k_map_seq)
+        ss_transformed = self.linear_ss(s_map_seq)
+        sk_transformed = self.linear_sk(s_map_seq)
+
+        # Perform attention
+        kk_output, _ = self.attention_kk(query=kk_transformed, key=kk_transformed, value=kk_transformed)
+        ks_output, _ = self.attention_ks(query=ks_transformed, key=ks_transformed, value=ks_transformed)
+        ss_output, _ = self.attention_ss(query=ss_transformed, key=ss_transformed, value=ss_transformed)
+        sk_output, _ = self.attention_sk(query=sk_transformed, key=sk_transformed, value=sk_transformed)
+
+        # Combine features
+        k_final = kk_output + sk_output  # Shape: (batch_size, seq_length, feature_dim)
+        s_final = ss_output + ks_output  # Shape: (batch_size, seq_length, feature_dim)
+
+        # Reshape back to original shape
+        k_final = k_map + k_final.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
+        s_final = s_map + s_final.permute(0, 2, 1).unsqueeze(2)  # Shape: (batch_size, feature_dim, 1, seq_length)
+
+        return k_final, s_final
+
+
+
+
+class OrthAtt(nn.Module):
+    def __init__(self, feature_dim, num_heads=1):
+        super(OrthAtt, self).__init__()
+        self.feature_dim = feature_dim
+        self.linear_kk = nn.Linear(self.feature_dim, self.feature_dim)
+        self.linear_ks = nn.Linear(self.feature_dim, self.feature_dim)
+        self.linear_ss = nn.Linear(self.feature_dim, self.feature_dim)
+        self.linear_sk = nn.Linear(self.feature_dim, self.feature_dim)
 
         self.attention_kk = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
         self.attention_ks = nn.MultiheadAttention(embed_dim=self.feature_dim, num_heads=num_heads, batch_first=True)
@@ -147,13 +97,19 @@ class OrthBlock(nn.Module):
         # Ensure orthogonality of query and key projection weights for attention_kk and attention_ks
         # self.orthogonalize(self.attention_kk.in_proj_weight[:self.feature_dim], self.attention_ks.in_proj_weight[:self.feature_dim])
         # self.orthogonalize(self.attention_ss.in_proj_weight[:self.feature_dim], self.attention_sk.in_proj_weight[:self.feature_dim])
-
+        kk = self.linear_kk(k_map_seq)
+        ks = self.linear_ks(k_map_seq)
+        ss = self.linear_ss(s_map_seq)
+        sk = self.linear_sk(s_map_seq)
+        
+        # k_map_seq = kk_transformed + sk_transformed
+        # s_map_seq = ss_transformed + ks_transformed
         # Perform attention
-        kk_output, _ = self.attention_kk(k_map_seq, k_map_seq, k_map_seq)  # Self-attention on k_map
-        ks_output, _ = self.attention_ks(k_map_seq, s_map_seq, s_map_seq)  # Cross-attention: k_map queries s_map
-        ss_output, _ = self.attention_ss(s_map_seq, s_map_seq, s_map_seq)  # Self-attention on s_map
-        sk_output, _ = self.attention_sk(s_map_seq, k_map_seq, k_map_seq)  # Cross-attention: s_map queries k_map
-
+        kk_output, _ = self.attention_kk(kk, kk, kk)  # Self-attention on k_map
+        ks_output, _ = self.attention_ks(ss, ks, ks)  # Cross-attention: k_map queries s_map
+        sk_output, _ = self.attention_sk(kk, sk, sk)  # Cross-attention: s_map queries k_map
+        ss_output, _ = self.attention_ss(ss, ss, ss)   # Self-attention on s_map
+        
         # Combine features
         k_combined = kk_output + sk_output  # Shape: (batch_size, seq_length, feature_dim)
         s_combined = ss_output + ks_output  # Shape: (batch_size, seq_length, feature_dim)
@@ -321,7 +277,7 @@ class StarNet(nn.Module):
         self.head_k = nn.Linear(self.in_channel, num_classes)
         # self.head_s = nn.Linear(self.in_channel, n_speaker)
         
-        self.orth_block = OrthBlock(feature_dim=64)
+        self.orth_block = OrthAtt(feature_dim=64)
         # self.apply(self._init_weights)
         # self.k_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
         # self.s_attn = nn.MultiheadAttention(embed_dim=13, num_heads=1)
@@ -407,6 +363,7 @@ if __name__ == '__main__':
 
     
     output_tensor = starnet(input_tensor)
+    print(starnet.orth_block.linear_kk)
     # print(output_tensor)
 #     macs, params = thop.profile(starnet,inputs=(input_tensor,))
 #     # start = time.time()

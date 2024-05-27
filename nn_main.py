@@ -32,7 +32,7 @@ parser.add_argument('--ptname', default="our", help='')
 parser.add_argument('--train', default="yes", help='')
 parser.add_argument('--denoise_loss', default="yes", help='')
 parser.add_argument('--orth_loss', default="yes", help='')
-parser.add_argument('--backbone', default="star", help='res | star ｜ bc | decouple | tc14')
+parser.add_argument('--backbone', default="star", help='res | star ｜ bc | decouple | tc14 | kwt')
 parser.add_argument('--denoise_net', default="specu", help='')
 parser.add_argument('--feat', default="spec", help='spec | mfcc ')
 parser.add_argument('--att', default="no", help='')
@@ -80,7 +80,8 @@ if __name__ == "__main__":
         # model_fp32.load("google/baseline_308_kwsacc_92.05_idloss_0.0394")
         # model_fp32.load("google_noisy/cammd_18_kwsacc_83.18_idloss_0.2399")
         # model_fp32.load("oh_73_kwsacc_84.94_idloss_0.2419") # oh
-        model_fp32.load("google_noisy/oh5_21_kwsacc_84.49_idloss_0.1591") # oh
+        model_fp32.load("google_noisy/kwt_143_kwsacc_77.27_idloss_0.1912") # oh
+
         util.train(model_fp32, NUM_EPOCH,loaders,args)
 
     else:
@@ -102,12 +103,15 @@ if __name__ == "__main__":
         
         # star
         # python nn_main.py --denoise_loss yes --orth_loss yes --att no --backbone star --denoise_net specu --ptname star --train no
-        model_fp32.load("my_61_kwsacc_85.70_idloss_0.1581")
+        # model_fp32.load("my_61_kwsacc_86.70_idloss_0.1581")
         
         # decouple
         # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone decouple --denoise_net specu --ptname star --train no --feat mfcc
         # model_fp32.load("google_noisy/dmfccx_145_kwsacc_84.98_idloss_0.1745")
         
+        # kwt 
+        # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone kwt --denoise_net unet --ptname star --train no --feat mfcc
+        model_fp32.load("kwt2_17_kwsacc_84.02_idloss_0.1642")
         
         # python nn_main.py  --train no --denoise_loss no --orth_loss yes --att no --backbone star --denoise_net specu --ptname star 
         # model_fp32.load("LSN+MM_168_kwsacc_84.31_idloss_0.1821")
