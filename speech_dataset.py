@@ -81,7 +81,7 @@ def get_all_data_length(root_dir):          # for debug
 
 
 # 在train_set中的speaker 不会出现在valid_set和test_set里
-def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.85, 0.05, 0.1]):
+def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
     if sum(split_pct) != 1:
         raise ValueError("Split percentages must sum to 1")
     unknown_list = []
@@ -106,7 +106,7 @@ def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.85, 0.05, 0.1]
                 speaker_samples = []
 
                 for wav_file in os.listdir(os.path.join(root_dir, word)):
-                    if wav_file.endswith(".wav") and wav_file.split("_", 1)[0] == speaker:
+                    if wav_file.endswith(".pt") and wav_file.split("_", 1)[0] == speaker:
                         speaker_samples.append((os.path.join(root_dir, word, wav_file), word, speaker))
 
                 # Split speaker_samples into train/dev/test sets
@@ -117,6 +117,75 @@ def split_dataset(root_dir, word_list, speaker_list, split_pct=[0.85, 0.05, 0.1]
                     n_dev = int(len(speaker_samples) * split_pct[1] / (split_pct[1] + split_pct[2]))
                     dev_set += speaker_samples[:n_dev]
                     test_set += speaker_samples[n_dev:]
+
+
+    if "unknown" in word_list:
+        random.shuffle(unknown_list)
+        n_samples = len(unknown_list)
+        n_train = int(n_samples * split_pct[0])
+        n_dev = int(n_samples * split_pct[1])
+        train_set += unknown_list[:n_train]
+        dev_set += unknown_list[n_train:n_train + n_dev]
+        test_set += unknown_list[n_train + n_dev:]
+
+    if "silence" in word_list:
+        silence_samples = [os.path.join(root_dir, "_background_noise_", wav_file) for wav_file in os.listdir(os.path.join(root_dir, "_background_noise_")) if wav_file.endswith(".wav")]
+        n_samples = len(silence_samples)
+        n_train = int(n_samples * split_pct[0])
+        n_dev = int(n_samples * split_pct[1])
+        train_set += silence_samples[:n_train]
+        dev_set += silence_samples[n_train:n_train + n_dev]
+        test_set += silence_samples[n_train + n_dev:]
+
+    random.shuffle(train_set)
+    random.shuffle(dev_set)
+    random.shuffle(test_set)
+    # print(train_set,dev_set)
+    return train_set, dev_set, test_set
+
+# train valid test 共享speaker
+def split_dataset_simple(root_dir, word_list, speaker_list, split_pct=[0.8, 0.1, 0.1]):
+    if sum(split_pct) != 1:
+        raise ValueError("Split percentages must sum to 1")
+    unknown_list = []
+    train_set = []
+    dev_set = []
+    test_set = []
+
+    # Shuffle and split the speaker list into two groups
+    # random.shuffle(speaker_list)
+    # speaker_list = speaker_list.sort()
+    speaker_list = sorted(speaker_list, reverse=False)
+    n_train_speakers = int(len(speaker_list) * split_pct[0])
+    # train_speakers = speaker_list[:n_train_speakers]
+    # other_speakers = speaker_list[n_train_speakers:]
+    
+
+    # Process each word
+    for word in os.listdir(root_dir):
+        if word in word_list and os.path.isdir(os.path.join(root_dir, word)):
+            # Process each speaker
+            for speaker in speaker_list:
+                speaker_samples = []
+
+                for wav_file in os.listdir(os.path.join(root_dir, word)):
+                    if wav_file.endswith(".pt") and wav_file.split("_", 1)[0] == speaker:
+                        speaker_samples.append((os.path.join(root_dir, word, wav_file), word, speaker))
+                n = len(speaker_samples)
+                train_end = int(split_pct[0] * n)
+                val_end = train_end + int(split_pct[1] * n)
+                
+                train_set += speaker_samples[:train_end]
+                dev_set += speaker_samples[train_end:val_end]
+                test_set += speaker_samples[val_end:]
+                # Split speaker_samples into train/dev/test sets
+                # if speaker in train_speakers:
+                #     train_set += speaker_samples
+                # else:
+                #     # Split between dev and test sets
+                #     n_dev = int(len(speaker_samples) * split_pct[1] / (split_pct[1] + split_pct[2]))
+                #     dev_set += speaker_samples[:n_dev]
+                #     test_set += speaker_samples[n_dev:]
 
 
     if "unknown" in word_list:
@@ -377,6 +446,8 @@ def get_loaders( root_dir, word_list,speaker_list):
         split_root = "dataset/split/"
     elif root_dir == "dataset_lege/lege_origin/":
         split_root = "dataset_lege/split/"
+    elif root_dir == "dataset/huawei_modify/SPEC_new/":
+        split_root = "dataset/huawei_modify/split/"
     train_trip = read_csv(split_root+"train.csv")
     valid_trip = read_csv(split_root+"valid.csv")
     test_trip = read_csv(split_root+"test.csv")
@@ -409,15 +480,15 @@ class CsvLogger:
 
 
 def create_csv(root_dir, word_list,speaker_list):
-    train_csv = CsvLogger(filename='dataset_lege/split/train.csv', head=["path","kw","id"])
-    valid_csv = CsvLogger(filename='dataset_lege/split/valid.csv', head=["path","kw","id"])
-    test_csv = CsvLogger(filename='dataset_lege/split/test.csv', head=["path","kw","id"])
-    train, dev, test = split_dataset(root_dir, word_list, speaker_list)
+    train_csv = CsvLogger(filename='dataset/huawei_modify/split/train.csv', head=["path","kw","id"])
+    valid_csv = CsvLogger(filename='dataset/huawei_modify/split/valid.csv', head=["path","kw","id"])
+    test_csv = CsvLogger(filename='dataset/huawei_modify/split/test.csv', head=["path","kw","id"])
+    train, dev, test = split_dataset_simple(root_dir, word_list, speaker_list)
     ap = AudioPreprocessor()
     train_data = SpeechDataset(train, "train", ap, word_list, speaker_list)
     dev_data = SpeechDataset(dev, "train", ap, word_list, speaker_list)
     test_data = SpeechDataset(test, "train", ap, word_list, speaker_list)
-
+    print(len(train))
     train_trips = generate_triplets(train_data)
     # train_trip_dataset = TripletSpeechDataset(train_trip, "train", ap, word_list, speaker_list)
     valid_trips = generate_triplets(dev_data)
@@ -456,17 +527,24 @@ def read_csv(file_path):
     
 if __name__ == "__main__":
     # Test example
-    root_dir = "dataset_lege/lege_origin/"
-    word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
-    speaker_list = fetch_speaker_list(root_dir,word_list)
+    # root_dir = "dataset_lege/lege_origin/"
+    # word_list = ['上升', '下降', '乐歌', '停止', '升高', '坐', '复位', '小乐', '站', '降低']
+    
+
     # @todo: data preparation
     # root_dir =  "dataset/google_origin/"
     # word_list = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"]
     # speaker_list = fetch_speaker_list(root_dir,word_list)
   
-    # root_dir = "dataset/huawei_modify/WAV_new/"
+    root_dir = "dataset/huawei_modify/SPEC_new/"
     # word_list = ['hey_celia', '支付宝扫一扫', '停止播放', '下一首', '播放音乐', '微信支付', '关闭降噪', '小艺小艺', '调小音量', '开启透传']
-    # speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
+    word_list = [
+        'hey_celia', 'hi_celia', '上一首', '下一首', '你好悠悠',
+        '停止播放', '关闭透传', '关闭降噪', '小艺小艺', '小薇小薇',
+        '开启透传', '开启降噪', '微信支付', '挂断电话', '接听电话',
+        '播放音乐', '支付宝扫一扫', '支付宝支付', '调大音量', '调小音量'
+    ]   
+    speaker_list = [speaker for speaker in os.listdir("dataset/huawei_modify/WAV/") if speaker.startswith("A") ]
 
     
     create_csv(root_dir, word_list,speaker_list)
@@ -489,7 +567,7 @@ if __name__ == "__main__":
     # # 假设您已经有了一个包含三元组的列表 `triplets`
 
     # train_trip_loader = data.DataLoader(train_trip_dataset,batch_size= 16, shuffle=True)
-    loaders = get_loaders(root_dir, word_list, speaker_list)
+    # loaders = get_loaders(root_dir, word_list, speaker_list)
     # train_trip_loader = [0]
     # # 在训练循环中使用 DataLoader
     # for i,batch in enumerate(train_trip_loader):

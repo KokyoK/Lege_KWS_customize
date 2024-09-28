@@ -12,7 +12,7 @@ import torchaudio.functional as F_audio
 class AudioPreprocessor():
     def __init__(self):
         self.spectrogram = nn.Sequential(
-            # torchaudio.transforms.Resample(48000, 16000),
+            torchaudio.transforms.Resample(48000, 16000),
             torchaudio.transforms.MelSpectrogram(
                 sample_rate=16000,
                 n_fft=480,          # window length = 30,
@@ -25,7 +25,7 @@ class AudioPreprocessor():
             torchaudio.transforms.AmplitudeToDB()
         )
         self.mfcc = nn.Sequential(
-            # torchaudio.transforms.Resample(48000, 16000),  # 可以根据需要取消注释来重采样
+            torchaudio.transforms.Resample(48000, 16000),  # 可以根据需要取消注释来重采样
             torchaudio.transforms.MFCC(
                 sample_rate=16000,
                 n_mfcc=40,  # 通常取13个MFCC系数
@@ -42,8 +42,8 @@ class AudioPreprocessor():
 
     def __call__(self, data):
         # print(data[0].shape)
-        # o_data = self.spectrogram(data)
         o_data = self.mfcc(data)
+        # o_data = self.spectrogram(data)
         o_data = o_data.view(o_data.shape[1], o_data.shape[0], o_data.shape[2])
         # print(o_data.shape,data[1])
         return o_data
@@ -86,7 +86,7 @@ def process_audio_files(root_dir, dest_dir):
                 rel_path = os.path.relpath(audio_path, root_dir)  # 相对路径
                 wav_data = torchaudio.load(audio_path)[0]
                 # wav_data = F_audio.resample(wav_data, 16000, 8000)  # 假设将采样率从16000降低到8000
-                data_len = 16000  
+                data_len = 48000
                 out_data = wav_data
                 # Pad smaller audio files with zeros to reach 1 second (8_000 samples)
                 if (out_data.shape[1] < data_len):
@@ -119,7 +119,7 @@ def process_audio_files_exclude_prefix(root_dir, dest_dir, prefix='_'):
                 audio_path = os.path.join(subdir, file)
                 rel_path = os.path.relpath(audio_path, root_dir)  # 相对路径
                 wav_data = torchaudio.load(audio_path)[0]
-                data_len = 16000  
+                data_len = 48000
                 out_data = wav_data
                 # Pad smaller audio files with zeros to reach 1 second (8_000 samples)
                 if (out_data.shape[1] < data_len):
@@ -141,11 +141,11 @@ def process_audio_files_exclude_prefix(root_dir, dest_dir, prefix='_'):
 
 
 if __name__ == '__main__':
-    root_dir = 'dataset/google_origin'
-    dest_dir = 'dataset/google_origin_MFCC'
+    root_dir = 'dataset/huawei_modify/WAV_new'
+    dest_dir = 'dataset/huawei_modify/MFCC_new'
 
-#     root_dir = 'dataset_lege/lege_origin'
-#     dest_dir = 'dataset_lege/lege_origin_SPEC'
+# #     root_dir = 'dataset_lege/lege_origin'
+# #     dest_dir = 'dataset_lege/lege_origin_SPEC'
 
     process_audio_files_exclude_prefix(root_dir, dest_dir)
     
@@ -162,6 +162,9 @@ if __name__ == '__main__':
 
     # root_dir = 'dataset_lege/lege_noisy/NGSCD'
     # dest_dir = 'dataset_lege/lege_noisy/NGSCD_SPEC'
+    
+    a = torch.load("dataset/huawei_modify/SPEC_new/hey_celia/A00001_S0006.pt")
+    print(a.shape)
 
 
 

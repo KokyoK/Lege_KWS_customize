@@ -103,7 +103,7 @@ if __name__ == "__main__":
         
         # star
         # python nn_main.py --denoise_loss yes --orth_loss yes --att no --backbone star --denoise_net specu --ptname star --train no
-        # model_fp32.load("my_61_kwsacc_86.70_idloss_0.1581")
+        model_fp32.load("oht_20_kwsacc_85.46_idloss_0.2305")
         
         # decouple
         # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone decouple --denoise_net specu --ptname star --train no --feat mfcc
@@ -111,7 +111,7 @@ if __name__ == "__main__":
         
         # kwt 
         # python nn_main.py --denoise_loss no --orth_loss no --att no --backbone kwt --denoise_net unet --ptname star --train no --feat mfcc
-        model_fp32.load("kwt2_17_kwsacc_84.02_idloss_0.1642")
+        # model_fp32.load("kwt2_17_kwsacc_84.02_idloss_0.1642")
         
         # python nn_main.py  --train no --denoise_loss no --orth_loss yes --att no --backbone star --denoise_net specu --ptname star 
         # model_fp32.load("LSN+MM_168_kwsacc_84.31_idloss_0.1821")
@@ -124,8 +124,9 @@ if __name__ == "__main__":
         
         
         
-        util.evaluate_testset(model_fp32, loaders[2],args)
-        util.evaluate_testset_all(model_fp32, loaders[2],args)
+        # util.evaluate_testset_all(model_fp32, loaders[2],args)
+        util.evaluate_testset_denoise(model_fp32, loaders[2],args)
+        # util.evaluate_testset_all(model_fp32, loaders[2],args)
         
 
 
